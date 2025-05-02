@@ -1,0 +1,2 @@
+a = ['increase_age', 'decrease_age', 'change_workclass', 'increase_fnlwgt', 'decrease_fnlwgt', 'change_education', 'increase_education-num', 'decrease_education-num', 'change_marital-status', 'change_occupation', 'change_relationship', 'change_race', 'change_sex', 'increase_capital-gain', 'decrease_capital-gain', 'increase_capital-loss', 'decrease_capital-loss', 'increase_hours-per-week', 'decrease_hours-per-week', 'change_native-country']
+print(len(a))

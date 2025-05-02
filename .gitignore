@@ -1,0 +1,6 @@
+myenv
+lightning_logs
+__pycache__
+*.pth
+.vscode
+data
