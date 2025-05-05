@@ -27,13 +27,13 @@ class CERTIFAI_PPO:
         self.action_space = None
         self.constraints = None 
         self.constraints = [1,1,1,1,1]
-        self.constraints = [0,0,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1]
+        self.constraints = [0,0,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1]
         self.policy_network = None
         self.value_network = None
         self.optimizer = None
 
         self.generation = 0
-        self.max_generations = None
+        self.max_generations = 20
 
         if dataset_path is not None:
             self.tab_dataset = pd.read_csv(dataset_path)
@@ -76,7 +76,7 @@ class CERTIFAI_PPO:
             else:  # Continuous feature
                 action_space.append(f'increase_{column}')
                 action_space.append(f'decrease_{column}')
-        print("Action space defined:", action_space)
+        #print("Action space defined:", action_space)
         self.actions_stats = [0] * len(action_space)
         return action_space
 
@@ -501,103 +501,218 @@ class CERTIFAI_PPO:
             print(f"Error in update_policy: {e}")
             return 0, 0
 
-    def fit(self, model, generations=10):
-        if self.max_generations is not None:
-            generations = self.max_generations
-        else:
-            self.max_generations = generations
-        # Generate counterfactuals using PPO
+    def evaluate_policy(self, model, num_samples=10):
+        """Evaluate the current policy by trying to find counterfactuals for a few samples."""
+        if not hasattr(self, 'evaluation_success_rates'):
+            self.evaluation_success_rates = []
+        
         original_features = self.tab_dataset.values
-        cfes = self.tab_dataset.copy().values
         categories = self.generate_cats_ids(self.tab_dataset)
-        best_distances = [float('inf')] * len(original_features)  # Initialize best distances
+        
+        # Sample a few instances for evaluation
+        indices = np.random.choice(len(original_features), num_samples, replace=False)
+        success_count = 0
+        
+        for i in indices:
+            original = original_features[i]
+            state = self.get_state(original, original.copy())
+            found_cf = False
+            
+            # Try to find a counterfactual with limited steps
+            for step in range(20):  # Limited steps for evaluation
+                action = self.select_action(state)
+                modified_features = self.apply_action(state, action, categories)
+                next_state = self.get_state(original, modified_features)
+                
+                # Check if we found a counterfactual
+                if self.generate_prediction(model, modified_features) != self.generate_prediction(model, original):
+                    found_cf = True
+                    success_count += 1
+                    break
+                
+                state = next_state
+        
+        success_rate = success_count / num_samples
+        self.evaluation_success_rates.append(success_rate)
+        print(f"Generation {self.generation}: Evaluation success rate: {success_rate:.2f}")
+        
+        return success_rate
 
-        for generation in tqdm(range(generations)):
+    def train(self, model, max_generations=20, samples_per_batch=32):
+        """Train the PPO policy without focusing on finding final counterfactuals."""
+        # Initialize training parameters
+        self.max_generations = max_generations
+        original_features = self.tab_dataset.values
+        categories = self.generate_cats_ids(self.tab_dataset)
+        
+        # Initialize history tracking
+        if not hasattr(self, 'policy_loss_history'):
+            self.policy_loss_history = []
+        if not hasattr(self, 'value_loss_history'):
+            self.value_loss_history = []
+        if not hasattr(self, 'evaluation_success_rates'):
+            self.evaluation_success_rates = []
+        
+        for generation in tqdm(range(max_generations)):
             self.generation = generation
             all_trajectories = []
             
-            for i, original in enumerate(original_features):
-                try:
-                    # If we already have a counterfactual, use it as the starting point
-                    if self.results[i] is None:
-                        state = self.get_state(original, original.copy())
-                    else:
-                        state = self.get_state(original, self.results[i][1])
-
-                    episode_states = []
-                    episode_actions = []
-                    episode_rewards = []
-                    
-                    for step in range(10):  # Steps per episode
-                        try:
-                            action = self.select_action(state)
-                            modified_features = self.apply_action(state, action, categories)
-                            next_state = self.get_state(original, modified_features)
-                            reward = self.calculate_reward(original, modified_features, model, i)
-                            
-                            episode_states.append(state)
-                            episode_actions.append(action)
-                            episode_rewards.append(reward)
-                            
-                            # Check if we found a counterfactual
-                            prediction_changed = self.generate_prediction(model, modified_features) != self.generate_prediction(model, original)
-                            if prediction_changed:
-                                old_distance = self.get_distance(original, self.results[i][1]) if self.results[i] is not None else float('inf')
-                                new_distance = self.get_distance(original, modified_features)
-                                if new_distance < old_distance:
-                                    try:
-                                        decoded_features = self.decode_features(modified_features)
-                                        self.results[i] = (original, decoded_features, prediction_changed, round(new_distance, 2), generation)
-                                        best_distances[i] = new_distance
-                                        cfes[i] = decoded_features
-                                    except Exception as e:
-                                        print(f"Error updating results: {e}")
-
-                            state = next_state
-                        except Exception as e:
-                            print(f"Error in episode step {step}: {e}")
-                            continue
-                    
-                    # Calculate discounted returns for more accurate advantage estimation
-                    returns = []
-                    discounted_sum = 0
-                    gamma = 0.99  # Discount factor
-                    for r in reversed(episode_rewards):
-                        discounted_sum = r + gamma * discounted_sum
-                        returns.insert(0, discounted_sum)
-                    
-                    # Create trajectories with states, actions, and returns
-                    for s, a, r in zip(episode_states, episode_actions, returns):
-                        all_trajectories.append((s, a, r))
+            # Sample instances for this training batch
+            indices = np.random.choice(len(original_features), min(samples_per_batch, len(original_features)), replace=False)
+            
+            for i in indices:
+                original = original_features[i]
+                # Always start from the original instance during training
+                state = self.get_state(original, original.copy())
                 
-                except Exception as e:
-                    print(f"Error processing sample {i}: {e}")
-                    continue
+                # Collect episode trajectories
+                episode_states, episode_actions, episode_rewards = [], [], []
+                
+                for step in range(10):  # Steps per episode
+                    try:
+                        action = self.select_action(state)
+                        modified_features = self.apply_action(state, action, categories)
+                        next_state = self.get_state(original, modified_features)
+                        reward = self.calculate_reward(original, modified_features, model, i)
+                        
+                        episode_states.append(state)
+                        episode_actions.append(action)
+                        episode_rewards.append(reward)
+                        
+                        state = next_state
+                    except Exception as e:
+                        print(f"Error in training step: {e}")
+                        continue
+                
+                # Calculate returns and add to trajectories
+                returns = []
+                discounted_sum = 0
+                gamma = 0.99
+                for r in reversed(episode_rewards):
+                    discounted_sum = r + gamma * discounted_sum
+                    returns.insert(0, discounted_sum)
+                
+                for s, a, r in zip(episode_states, episode_actions, returns):
+                    all_trajectories.append((s, a, r))
             
             # Update policy with all trajectories collected in this generation
             if all_trajectories:
                 policy_loss, value_loss = self.update_policy(all_trajectories)
                 self.policy_loss_history.append(policy_loss)
                 self.value_loss_history.append(value_loss)
+            
+            # Evaluate policy performance periodically
+            if generation % 5 == 0:
+                try:
+                    self.evaluate_policy(model)
+                except Exception as e:
+                    print(f"Error in evaluation: {e}")
+        
+        # Save the trained model
+        try:
+            self.save("models")
+        except Exception as e:
+            print(f"Error saving model: {e}")
+            # Try to save to current directory if models directory doesn't exist
+            try:
+                self.save("./")
+            except:
+                print("Failed to save model")
 
-        self.save("models")
-
-        con, cat = self.get_con_cat_columns(self.tab_dataset)
-
-        not_found = 0
-        for result in self.results:
-            if result is not None:
-                print(result)
-            else:
-                # If no counterfactual found, append None
-                not_found += 1
-        print(f"Number of counterfactuals not found: {not_found} / {len(self.results)}")
-        print(self.actions_stats)
+    def generate_counterfactuals(self, model, max_steps=50):
+        """Generate counterfactuals using the trained policy."""
+        original_features = self.tab_dataset.values
+        categories = self.generate_cats_ids(self.tab_dataset)
+        self.results = [None] * len(original_features)
+        self.best_distances = [float('inf')] * len(original_features)
+        cfes = self.tab_dataset.copy().values
+        
+        for i, original in tqdm(enumerate(original_features), total=len(original_features), desc="Generating counterfactuals"):
+            # Start from the original instance
+            state = self.get_state(original, original.copy())
+            best_cf = None
+            best_distance = float('inf')
+            
+            # Try multiple episodes to find the best counterfactual
+            for episode in range(3):  # Try a few episodes per instance
+                current_state = state.copy()
+                current_features = original.copy()
+                
+                for step in range(max_steps):
+                    try:
+                        action = self.select_action(current_state)
+                        modified_features = self.apply_action(current_state, action, categories)
+                        next_state = self.get_state(original, modified_features)
+                        
+                        # Check if we found a counterfactual
+                        prediction_changed = self.generate_prediction(model, modified_features) != self.generate_prediction(model, original)
+                        
+                        if prediction_changed:
+                            distance = self.get_distance(original, modified_features)
+                            if distance < best_distance:
+                                best_distance = distance
+                                best_cf = modified_features
+                        
+                        current_state = next_state
+                        current_features = modified_features
+                    except Exception as e:
+                        print(f"Error in generation step: {e}")
+                        continue
+                
+            # Store the best counterfactual found
+            if best_cf is not None:
+                try:
+                    decoded_features = self.decode_features(best_cf)
+                    self.results[i] = (original, decoded_features, True, round(best_distance, 2), 0)
+                    cfes[i] = decoded_features
+                    self.best_distances[i] = best_distance
+                except Exception as e:
+                    print(f"Error updating results: {e}")
+        
+        # Display results
         self.display_results()
+        con, cat = self.get_con_cat_columns(self.tab_dataset)
         self.display_KPIs(self.tab_dataset, cfes, con, cat, model)
-        self.plot_metrics()
         self.plot_summary()
-        self.calculate_feature_importance()
+        
+        #self.calculate_feature_importance()
+
+
+    def run_complete_workflow(self, model, training_generations=20, cf_max_steps=50):
+        """Complete workflow: train policy first, then generate counterfactuals."""
+        # Step 1: Train the policy
+        print("Training PPO policy...")
+        self.train(model, max_generations=training_generations)
+        
+        # Step 2: Generate counterfactuals using the trained policy
+        print("Generating counterfactuals...")
+        self.generate_counterfactuals(model, max_steps=cf_max_steps)
+        
+        # Plot training metrics
+        self.plot_training_metrics()
+
+
+    def run_inference_only(self, model, model_path="models/", max_steps=50):
+        """
+        Use a pre-trained PPO model to generate counterfactuals without additional training.
+        
+        Parameters:
+        - model: The classifier model for which we're generating counterfactuals
+        - model_path: Path to the pre-trained PPO model
+        - max_steps: Maximum steps to take when generating each counterfactual
+        """
+        # Load the pre-trained model
+        if not self.load(model_path):
+            print("Failed to load pre-trained model. Please ensure the model exists at the specified path.")
+            return False
+        
+        # Generate counterfactuals using the loaded model
+        print("Generating counterfactuals using pre-trained policy...")
+        self.generate_counterfactuals(model, max_steps=max_steps)
+        
+        return True
+
+
 
     def display_KPIs(self, x, y, con, cat, model):
         # Display KPIs for the generated counterfactuals
@@ -609,7 +724,40 @@ class CERTIFAI_PPO:
         print(f"Sparsity KPI: {sparsity:.4f}")
         #print(f"Validity KPI: {validity:.4f}")
 
-
+    def plot_training_metrics(self):
+        """Plot training metrics including policy loss, value loss, and evaluation success rates."""
+        plt.figure(figsize=(15, 5))
+        
+        # Plot policy loss
+        plt.subplot(1, 3, 1)
+        plt.plot(self.policy_loss_history, label='Policy Loss', color='blue')
+        plt.xlabel('Generation')
+        plt.ylabel('Loss')
+        plt.title('Policy Loss')
+        plt.legend()
+        
+        # Plot value loss
+        plt.subplot(1, 3, 2)
+        plt.plot(self.value_loss_history, label='Value Loss', color='orange')
+        plt.xlabel('Generation')
+        plt.ylabel('Loss')
+        plt.title('Value Loss')
+        plt.legend()
+        
+        # Plot evaluation success rates
+        if hasattr(self, 'evaluation_success_rates') and len(self.evaluation_success_rates) > 0:
+            plt.subplot(1, 3, 3)
+            plt.plot(range(0, len(self.evaluation_success_rates) * 5, 5), 
+                    self.evaluation_success_rates, 
+                    label='Success Rate', 
+                    color='green')
+            plt.xlabel('Generation')
+            plt.ylabel('Success Rate')
+            plt.title('Evaluation Success Rate')
+            plt.legend()
+        
+        plt.tight_layout()
+        plt.show()
 
     def plot_metrics(self):
         plt.figure(figsize=(10, 4))
@@ -685,7 +833,7 @@ class CERTIFAI_PPO:
             print(f"Mean distance: {np.mean(distances):.4f}")
             print(f"Median distance: {np.median(distances):.4f}")
             print(f"Max distance: {np.max(distances):.4f}")
-            print(f"Min distance: {np.min(distances):.4f}")
+            print(f"Min distance: {np.min(distances):.4f}\n")
         else:
             print("No successful counterfactuals found.")
 
@@ -725,8 +873,6 @@ class CERTIFAI_PPO:
         plt.show()
 
 
-
-
     def save(self, path):
         '''Function to save the model and the dataset'''
         try:
@@ -738,11 +884,16 @@ class CERTIFAI_PPO:
             print(f"Error saving model: {e}")
 
     def load(self, path):
-        '''Function to load the model and the dataset'''
-        self.policy_network.load_state_dict(torch.load(path + '/policy_network.pth'))
-        self.value_network.load_state_dict(torch.load(path + '/value_network.pth'))
-        self.tab_dataset = pd.read_csv(path + '/dataset.csv')
-        print(f"Model and dataset loaded from {path}")
+        '''Function to load the pre-trained model'''
+        try:
+            self.policy_network.load_state_dict(torch.load(path + '/policy_network.pth'))
+            self.value_network.load_state_dict(torch.load(path + '/value_network.pth'))
+            self.tab_dataset = pd.read_csv(path + '/dataset.csv')
+            print(f"Model loaded successfully from {path}")
+            return True
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            return False
 
     @classmethod
     def from_csv(cls, path):

@@ -924,8 +924,8 @@ class CERTIFAI:
         #     print(f"Best Counterfactual {index}: {counterfacts[0]}")
         #     print(f"Distance {index}: {distances[0]}")
 
-        print(proximity_KPI(x, cfes, con, cat))
-        print(sparsity_KPI(x, cfes))
+        print("Proximity KPI :", proximity_KPI(x, cfes, con, cat))
+        print("Sparsity KPI :",sparsity_KPI(x, cfes))
             
             
     def check_robustness(self, x = None, normalised = False):

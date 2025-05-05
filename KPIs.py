@@ -19,6 +19,15 @@ def proximity_KPI(x, y, con=None, cat=None):
     """
     Calculate the average distance between the true and predicted values.
     All the values are first normalized to a value between 0 and 1.
+
+    Parameters:
+    - x: The original DataFrame.
+    - y: The DataFrame of counterfactual explanations.
+    - con: List of continuous features.
+    - cat: List of categorical features.
+
+    Returns:
+    - The average distance between the true and predicted values.
     """
     assert isinstance(x, pd.DataFrame), 'This distance can be used only if input is a row of a pandas DataFrame at the moment.'
 
@@ -63,6 +72,13 @@ def sparsity_KPI(x, y):
     """
     Calculate the average sparsity between the true and predicted values.
     Sparsity is defined as the number of features that are changed.
+
+    Parameters:
+    - x: The original DataFrame.
+    - y: The DataFrame of counterfactual explanations.
+
+    Returns:
+    - The average sparsity of the counterfactuals.
     """
     assert isinstance(x, pd.DataFrame), 'This sparsity metric can be used only if input is a row of a pandas DataFrame at the moment.'
 

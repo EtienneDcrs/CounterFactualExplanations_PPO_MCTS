@@ -93,6 +93,7 @@ elif dataset == 'drug200' or dataset == 'drug5':
     out = 5
 
 cert = CERTIFAI_PPO.from_csv(url)
+cert = CERTIFAI_PPO(dataset_path=url)
 cert2 = CERTIFAI.from_csv(url)
 
 # Prepare data
@@ -118,19 +119,14 @@ val_loader = DataLoader(
 )
 
 
-
-
-
 in_feats = predictors.shape[1]
-
 
 
 # Check if model already exists
 if os.path.exists(model_path):
-    print("Loading existing model...")
     model = Classifier(in_feats=in_feats, out=out)
     model.load_state_dict(torch.load(model_path))
-    print("Model loaded successfully.")
+    print("Classififcation Model loaded successfully.")
         
 else:
     print("Model not found, training a new one.")
@@ -144,7 +140,11 @@ else:
 
 
 # Generate counterfactuals using PPO
-cert.fit(model)
+#cert.run_inference_only(model)
+cert.run_complete_workflow(model, training_generations=25, cf_max_steps=50)
+print("-" * 20)
+print("Running Certifai")
+print("-" * 20)
 cert2.fit(model)
 
 # print the results
