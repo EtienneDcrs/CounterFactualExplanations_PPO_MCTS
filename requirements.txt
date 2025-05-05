@@ -3,5 +3,6 @@ pandas
 torch
 scikit-learn
 scikit-image
+matplotlib
+pytorch-lightning
 tqdm
-pytorch_lightning

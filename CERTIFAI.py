@@ -14,6 +14,7 @@ from sklearn.metrics.pairwise import manhattan_distances as L1
 from sklearn.metrics.pairwise import euclidean_distances as L2
 from skimage.metrics import structural_similarity as SSIM
 from tqdm import tqdm
+from KPIs import proximity_KPI, sparsity_KPI, validity_KPI
 
 
 class CERTIFAI:
@@ -782,6 +783,7 @@ class CERTIFAI:
                 containing the original data sample, the generated  counterfactual(s)
                 for that data sample and their distance(s).
         '''
+        cfes = []
         
         
         if x is None:
@@ -913,12 +915,17 @@ class CERTIFAI:
                     start = 0)
             
             self.results.append((sample, counterfacts, list(fitness_dict.values())))
-        for index, result in enumerate(self.results):
-            sample, counterfacts, distances = result
-            # print the sample values and the best counterfactual
-            print(f"Sample {index}: {sample.values.flatten()}")
-            print(f"Best Counterfactual {index}: {counterfacts[0]}")
-            print(f"Distance {index}: {distances[0]}")
+            cfes.append(counterfacts[0])
+        
+        # for index, result in enumerate(self.results):
+        #     sample, counterfacts, distances = result
+        #     # print the sample values and the best counterfactual
+        #     print(f"Sample {index}: {sample.values.flatten()}")
+        #     print(f"Best Counterfactual {index}: {counterfacts[0]}")
+        #     print(f"Distance {index}: {distances[0]}")
+
+        print(proximity_KPI(x, cfes, con, cat))
+        print(sparsity_KPI(x, cfes))
             
             
     def check_robustness(self, x = None, normalised = False):

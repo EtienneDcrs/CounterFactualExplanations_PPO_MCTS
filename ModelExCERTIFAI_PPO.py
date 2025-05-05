@@ -5,7 +5,8 @@ import pytorch_lightning as pl
 import torch.optim as optim
 import torch.nn.functional as F
 from collections import OrderedDict
-from CERTIFAI_PPO import CERTIFAI
+from CERTIFAI_PPO import CERTIFAI_PPO
+from CERTIFAI import CERTIFAI
 from torch.utils.data import TensorDataset, DataLoader
 from pytorch_lightning.callbacks import EarlyStopping
 
@@ -91,12 +92,14 @@ elif dataset == 'drug200' or dataset == 'drug5':
     model_path = 'drug200_model.pt'
     out = 5
 
-cert = CERTIFAI.from_csv(url)
+cert = CERTIFAI_PPO.from_csv(url)
+cert2 = CERTIFAI.from_csv(url)
 
 # Prepare data
 model_input = cert.transform_x_2_input(cert.tab_dataset, pytorch=True)
 target = model_input[:, -1].long()
 cert.tab_dataset = cert.tab_dataset.iloc[:, :-1]
+cert2.tab_dataset = cert2.tab_dataset.iloc[:, :-1]
 predictors = model_input[:, :-1]
 print(predictors.shape)
 
@@ -142,6 +145,7 @@ else:
 
 # Generate counterfactuals using PPO
 cert.fit(model)
+cert2.fit(model)
 
 # print the results
 # for result in cert.results:

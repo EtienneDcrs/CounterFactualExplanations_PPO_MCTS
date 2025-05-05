@@ -12,9 +12,10 @@ from sklearn.metrics.pairwise import manhattan_distances as L1
 from sklearn.metrics.pairwise import euclidean_distances as L2
 from skimage.metrics import structural_similarity as SSIM
 from tqdm import tqdm
+from KPIs import proximity_KPI, sparsity_KPI, validity_KPI
 warnings.filterwarnings("ignore")
 
-class CERTIFAI:
+class CERTIFAI_PPO:
     def __init__(self, dataset_path = None, numpy_dataset = None):
     
         self.dataset_path = dataset_path
@@ -45,6 +46,7 @@ class CERTIFAI:
 
         self.initialize_state_action_spaces()
         self.initialize_ppo_networks()
+        self.cats_ids = self.generate_cats_ids(self.tab_dataset)
 
         self.rewards_history = []
         self.policy_loss_history = []
@@ -499,13 +501,14 @@ class CERTIFAI:
             print(f"Error in update_policy: {e}")
             return 0, 0
 
-    def fit(self, model, generations=5):
+    def fit(self, model, generations=10):
         if self.max_generations is not None:
             generations = self.max_generations
         else:
             self.max_generations = generations
         # Generate counterfactuals using PPO
         original_features = self.tab_dataset.values
+        cfes = self.tab_dataset.copy().values
         categories = self.generate_cats_ids(self.tab_dataset)
         best_distances = [float('inf')] * len(original_features)  # Initialize best distances
 
@@ -546,6 +549,7 @@ class CERTIFAI:
                                         decoded_features = self.decode_features(modified_features)
                                         self.results[i] = (original, decoded_features, prediction_changed, round(new_distance, 2), generation)
                                         best_distances[i] = new_distance
+                                        cfes[i] = decoded_features
                                     except Exception as e:
                                         print(f"Error updating results: {e}")
 
@@ -578,18 +582,34 @@ class CERTIFAI:
 
         self.save("models")
 
+        con, cat = self.get_con_cat_columns(self.tab_dataset)
+
         not_found = 0
         for result in self.results:
             if result is not None:
                 print(result)
             else:
+                # If no counterfactual found, append None
                 not_found += 1
         print(f"Number of counterfactuals not found: {not_found} / {len(self.results)}")
         print(self.actions_stats)
         self.display_results()
+        self.display_KPIs(self.tab_dataset, cfes, con, cat, model)
         self.plot_metrics()
         self.plot_summary()
         self.calculate_feature_importance()
+
+    def display_KPIs(self, x, y, con, cat, model):
+        # Display KPIs for the generated counterfactuals
+        proximity = proximity_KPI(x, y, con, cat)
+        sparsity = sparsity_KPI(x, y)
+        #validity = validity_KPI(model, x, y)
+
+        print(f"Proximity KPI: {proximity:.4f}")
+        print(f"Sparsity KPI: {sparsity:.4f}")
+        #print(f"Validity KPI: {validity:.4f}")
+
+
 
     def plot_metrics(self):
         plt.figure(figsize=(10, 4))
