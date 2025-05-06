@@ -11,7 +11,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from pytorch_lightning.callbacks import EarlyStopping
 
 patience = 10
-max_epochs = 15
+max_epochs = 100
 
 early_stop = EarlyStopping(
     monitor='val_loss',
@@ -80,17 +80,27 @@ class Classifier(pl.LightningModule):
 
 
 dataset = 'drug200'
-dataset = 'adult'
 dataset = 'drug5'
+dataset = 'adult'
+dataset = 'iris'
+dataset = 'diabetes'
 
 if dataset == 'adult':
-    url = 'adult_with_headers_100.csv'
+    url = 'adult_with_headers_30.csv'
     model_path = 'adult_model.pt'
     out = 2
 elif dataset == 'drug200' or dataset == 'drug5':
     url = dataset + '.csv'
     model_path = 'drug200_model.pt'
     out = 5
+elif dataset == 'iris':
+    url = 'iris_with_headers.csv'
+    model_path = 'iris_model.pt'
+    out = 3
+elif dataset == 'diabetes':
+    url = 'diabetes.csv'
+    model_path = 'diabetes_model.pt'
+    out = 2
 
 cert = CERTIFAI_PPO.from_csv(url)
 cert = CERTIFAI_PPO(dataset_path=url)
@@ -126,7 +136,7 @@ in_feats = predictors.shape[1]
 if os.path.exists(model_path):
     model = Classifier(in_feats=in_feats, out=out)
     model.load_state_dict(torch.load(model_path))
-    print("Classififcation Model loaded successfully.")
+    print(f"Classififcation Model {model_path} loaded successfully.")
         
 else:
     print("Model not found, training a new one.")
@@ -134,6 +144,13 @@ else:
 
     trainer = pl.Trainer(max_epochs=max_epochs, callbacks=[early_stop])
     trainer.fit(model, train_loader, val_loader)
+
+    # test the model
+    test_loader = DataLoader(
+        TensorDataset(predictors, target),
+        batch_size=batch_size
+    )
+    trainer.test(model, test_loader)
 
     # Save the model
     torch.save(model.state_dict(), model_path)

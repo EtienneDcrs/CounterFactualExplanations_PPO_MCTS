@@ -273,6 +273,7 @@ class CERTIFAI:
             '''
         
         fixed_feats = set() if fixed is None else set(fixed)
+        print(fixed_feats)
         
         self.constraints = []
         
@@ -531,7 +532,10 @@ class CERTIFAI:
                 for constraint in self.constraints:
                     if not isinstance(constraint, tuple):
                         # In this case the given feature is fixed
-                        temp.append(sample.loc[:,constraint].values)
+                        # Reshape to ensure consistent dimensionality - repeat the fixed value for all population members
+                        fixed_value = sample.loc[:,constraint].values[0]  # Get the single value
+                        repeated_values = np.full((self.Population, 1), fixed_value)  # Repeat for entire population
+                        temp.append(repeated_values)
                     else:
                         temp.append(np.random.randint(constraint[0]*100, (constraint[1]+1)*100,
                                                       size = (self.Population, 1))/100
@@ -588,8 +592,16 @@ class CERTIFAI:
             generation = pd.DataFrame(generation)
         
         for i in sample:
-            generation[i] = generation[i].astype(sample[i].dtype)
-        
+            try:
+                # Try direct conversion first
+                generation[i] = generation[i].astype(sample[i].dtype)
+            except ValueError:
+                # If direct conversion fails for numeric types, first convert to float then to the target type
+                if pd.api.types.is_numeric_dtype(sample[i].dtype):
+                    generation[i] = generation[i].astype(float).round().astype(sample[i].dtype)
+                else:
+                    # For non-numeric types, keep the original error
+                    generation[i] = generation[i].astype(sample[i].dtype)
         
         return generation.values.tolist(), distances
                     

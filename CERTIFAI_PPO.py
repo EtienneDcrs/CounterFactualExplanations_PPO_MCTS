@@ -27,7 +27,7 @@ class CERTIFAI_PPO:
         self.action_space = None
         self.constraints = None 
         self.constraints = [1,1,1,1,1]
-        self.constraints = [0,0,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1]
+        self.constraints = [1,0,1,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0]
         self.policy_network = None
         self.value_network = None
         self.optimizer = None
@@ -89,11 +89,15 @@ class CERTIFAI_PPO:
         self.policy_network = nn.Sequential(
             nn.Linear(input_dim, 128),
             nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
             nn.Linear(128, output_dim),
             nn.Softmax(dim=-1)
         )
         self.value_network = nn.Sequential(
             nn.Linear(input_dim, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
             nn.ReLU(),
             nn.Linear(128, 1)
         )
@@ -164,42 +168,60 @@ class CERTIFAI_PPO:
         return output
 
     def select_action(self, state):
-        # Select an action based on the policy network with exploration
+        """
+        Select an action based on the policy network with adaptive exploration.
+        
+        Parameters:
+        - state: Current state representation
+        
+        Returns:
+        - action: Selected action index
+        """
         with torch.no_grad():
-            tensor_state = self.transform_x_2_input(state, pytorch=True)
+            tensor_state = torch.tensor(state, dtype=torch.float32)
             
-            # Check for NaN values before passing to the network
+            # Check for NaN values
             if torch.isnan(tensor_state).any():
                 tensor_state = torch.nan_to_num(tensor_state, nan=0.0)
-                
+            
+            # Get action probabilities from policy network
             action_probs = self.policy_network(tensor_state)
             
-            # Check for and handle any NaN values in action probabilities
+            # Handle any issues with probabilities
             if torch.isnan(action_probs).any() or torch.isinf(action_probs).any():
-                print("Warning: NaN or Inf values detected in action probabilities. Resetting to uniform distribution.")
+                # Reset to uniform distribution if problems detected
                 action_probs = torch.ones_like(action_probs) / action_probs.size(-1)
             
-            # Ensure all probabilities are positive
-            action_probs = torch.clamp(action_probs, min=1e-6)
+            # Ensure minimum probability for all actions (prevent zeros)
+            min_prob = 1e-6
+            action_probs = torch.clamp(action_probs, min=min_prob)
             
-            # Add exploration noise to probabilities
-            exploration_rate = 0.1  # Adjust as needed
+            # Adaptive exploration rate based on training progress
+            # More exploration early, more exploitation later
+            generation = getattr(self, 'generation', 0)
+            max_generations = getattr(self, 'max_generations', 20)
+            progress = min(generation / max_generations, 1.0) if max_generations > 0 else 0.5
+            
+            # Exploration schedule: start high, gradually decrease
+            init_exploration = 0.3  # 30% exploration at start
+            final_exploration = 0.05  # 5% exploration at end
+            exploration_rate = init_exploration * (1 - progress) + final_exploration * progress
+            
+            # Apply exploration noise
             noise = torch.rand_like(action_probs) * exploration_rate
-            action_probs = action_probs + noise
+            action_probs = action_probs * (1 - exploration_rate) + noise
             
             # Renormalize to ensure they sum to 1
             action_probs = action_probs / action_probs.sum()
             
-            #print("Action probabilities:", action_probs)
-            
-            # Select action based on probabilities
+            # Sample action based on probabilities
             try:
                 action = torch.multinomial(action_probs, 1).item()
             except RuntimeError as e:
-                print(f"Error in multinomial sampling: {e}")
-                # Fallback to argmax if sampling fails
+                print(f"Error in action sampling: {e}")
+                # Fallback to argmax as a last resort
                 action = torch.argmax(action_probs).item()
-                
+        
         return action
 
     def apply_action(self, state, action, cat_ids=None):
@@ -245,8 +267,8 @@ class CERTIFAI_PPO:
                     progress = min(generation / max_generations, 1.0) if max_generations > 0 else 0.5
                     
                     # Adaptive step size: larger at beginning, finer as we progress
-                    base_step = 0.05  # 5% change
-                    fine_step = 0.01  # 1% change for fine-tuning
+                    base_step = 0.15  # 5% change
+                    fine_step = 0.05  # 1% change for fine-tuning
                     step_size = base_step * (1 - progress) + fine_step * progress
                     
                     if 'increase' in action_name:
@@ -280,73 +302,88 @@ class CERTIFAI_PPO:
 
     def calculate_reward(self, original_features, modified_features, model, sample_index):
         try:
+            # Get predictions for original and modified instances
             original_prediction = self.generate_prediction(model, original_features)
             modified_prediction = self.generate_prediction(model, modified_features)
+            
+            # Calculate distance between original and modified features
             distance = self.get_distance(original_features, modified_features)
             best_distance = self.best_distances[sample_index]
             
-            # Handle NaN or infinite distances
+            # Handle invalid distances
             if np.isnan(distance) or np.isinf(distance):
-                print("Warning: Invalid distance detected. Setting to a large value.")
-                distance = 1000.0  # Large penalty for invalid states
-                return -distance
-                
+                return -100.0  # Large penalty for invalid states
+            
+            # Calculate the number of modified features (for sparsity)
+            modified_features_count = np.sum(self.encode_features(original_features) != 
+                                            self.encode_features(modified_features))
+            
+            # If we've found a counterfactual (class changed)
             if original_prediction != modified_prediction:
-                # Successful counterfactual - reward inversely proportional to distance
-                base_reward = 100
-                distance_penalty = distance
-
-                # Apply a penalty based on the number of features modified
-                sparsity_penalty = 10 * len(np.where(modified_features != original_features)[0])
-
-                # Bonus for very small distances
-                if distance < 1.3:
-                    bonus = (1.3 - distance) * 100
-                else:
-                    bonus = 0
-
-                # Penalize if the distance is worse than the best distance found so far
-                if distance > best_distance:
-                    distance_penalty *= 2  # Increase the penalty for worse distances
-
-                reward = base_reward - distance_penalty + bonus
-                # reward -= sparsity_penalty 
-
-                # Ensure the reward is negative if the distance increases
-                if distance > best_distance:
-                    reward = min(reward, 0)
-                else:
+                print(f"Found counterfactual for sample {sample_index}: {original_features} -> {modified_features}")
+                print(f"Distance: {distance}, Modified features count: {modified_features_count}")
+                # Higher reward for successful counterfactual with smaller distance
+                base_reward = 100.0
+                # Penalize based on distance
+                distance_penalty = min(distance * 5, 50)  # Cap the penalty at 50
+                # Penalize for modifying too many features
+                sparsity_penalty = min(modified_features_count * 2, 30)  # Cap at 30
+                
+                # Calculate final reward
+                reward = base_reward - distance_penalty - sparsity_penalty
+                
+                # Bonus for improving upon the best distance found so far
+                if distance < best_distance:
+                    reward += 50.0
                     self.best_distances[sample_index] = distance  # Update best distance
+                
+                return max(reward, 10.0)  # Ensure minimum positive reward for success
             else:
-                # Different approach: provide gradient toward successful counterfactuals
+                # For unsuccessful counterfactuals, provide gradient through probability
                 with torch.no_grad():
-                    original_features_tensor = torch.tensor(self.encode_features(original_features), dtype=torch.float32)
-                    modified_features_tensor = torch.tensor(self.encode_features(modified_features), dtype=torch.float32)
-
-                    # Check for NaN values
+                    # Encode features for model input
+                    original_features_tensor = torch.tensor(self.encode_features(original_features), 
+                                                        dtype=torch.float32)
+                    modified_features_tensor = torch.tensor(self.encode_features(modified_features), 
+                                                        dtype=torch.float32)
+                    
+                    # Handle potential NaN values
                     original_features_tensor = torch.nan_to_num(original_features_tensor)
                     modified_features_tensor = torch.nan_to_num(modified_features_tensor)
-
-                    # Get probabilities (assuming model outputs logits before softmax)
-                    original_probs = torch.softmax(model(original_features_tensor), dim=1)
-                    modified_probs = torch.softmax(model(modified_features_tensor), dim=1)
-
-                    # Calculate probability shift toward different class
-                    prob_change = abs(original_probs[0, original_prediction] -
-                                    modified_probs[0, original_prediction]).item()
-
-                    # Reward based on how much the probability changed
-                    reward = (prob_change * 50) - distance
-
-                    # Ensure negative rewards for unsuccessful attempts
-                    reward = min(reward, -1)
                     
-            return reward
+                    # Get model outputs
+                    original_logits = model(original_features_tensor)
+                    modified_logits = model(modified_features_tensor)
+                    
+                    # Convert to probabilities
+                    original_probs = torch.softmax(original_logits, dim=1)
+                    modified_probs = torch.softmax(modified_logits, dim=1)
+                    
+                    # Target class - the class we want to change to
+                    target_class = 1 - original_prediction  # Assuming binary classification
+                    
+                    # Calculate probability shift toward target class
+                    prob_shift = (modified_probs[0, target_class] - 
+                                original_probs[0, target_class]).item()
+                    
+                    # Reward based on probability shift, penalize for distance
+                    prob_reward = prob_shift * 75  # Scale up the probability shift reward
+                    distance_penalty = min(distance, 25)  # Cap distance penalty
+                    
+                    # Total reward for unsuccessful attempt
+                    reward = prob_reward - distance_penalty - (modified_features_count * 1.5)
+                    
+                    # Give slightly better rewards for getting closer to success
+                    if modified_prediction == target_class:
+                        reward += 5.0
+                    
+                    # Ensure the reward is at least -50 to prevent extreme penalties
+                    return max(reward, -50.0)
         
         except Exception as e:
             print(f"Error in calculate_reward: {e}")
-            return -100.0  # Return a penalty if there's an error
-
+            return -50.0  # Return a significant penalty if there's an error
+        
     def get_distance(self, original_features, modified_features):
         try:
             features_diff = self.encode_features(original_features) - self.encode_features(modified_features)
@@ -568,7 +605,7 @@ class CERTIFAI_PPO:
                 # Collect episode trajectories
                 episode_states, episode_actions, episode_rewards = [], [], []
                 
-                for step in range(10):  # Steps per episode
+                for step in range(20):  # Steps per episode
                     try:
                         action = self.select_action(state)
                         modified_features = self.apply_action(state, action, categories)
@@ -602,7 +639,7 @@ class CERTIFAI_PPO:
                 self.value_loss_history.append(value_loss)
             
             # Evaluate policy performance periodically
-            if generation % 5 == 0:
+            if generation % 2 == 0:
                 try:
                     self.evaluate_policy(model)
                 except Exception as e:
