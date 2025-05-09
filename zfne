@@ -1,0 +1,12 @@
+CERTIFAI
+
+Mean distance of the generated counterfactuals from the original sample:  99.95827799479166     
+Proximity KPI : 0.7507
+Sparsity KPI : 7.7812
+
+PPO
+
+Success rate: 92.45% (710/768)
+Mean distance of counterfactuals: 40.85
+Proximity KPI: 0.2618
+Sparsity KPI: 1.1873

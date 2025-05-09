@@ -1,5 +1,6 @@
 
 import pandas as pd
+import torch
 from sklearn.metrics.pairwise import manhattan_distances as L1
 from sklearn.metrics.pairwise import euclidean_distances as L2
 
@@ -54,13 +55,13 @@ def proximity_KPI(x, y, con=None, cat=None):
                 # calculate the distance for categorical features
                 if x[col].iloc[i] != y[col].iloc[i]:
                     distance += 1
-            elif col in con:
+            else:
                 # calculate the distance for continuous features
                 normalized_x = normalize_value(x[col].iloc[i], mins[col], maxs[col])
                 normalized_y = normalize_value(y[col].iloc[i], mins[col], maxs[col])
                 distance += (normalized_y - normalized_x) ** 2
-            else:
-                raise ValueError(f"Column {col} is not specified as continuous or categorical.")
+            # else:
+            #     raise ValueError(f"Column {col} is not specified as continuous or categorical.")
 
         distance = distance ** 0.5
         distances.append(distance)  # append the distance to the list
@@ -102,9 +103,6 @@ def sparsity_KPI(x, y):
     average_sparsity = sum(sparsities) / len(sparsities)  # calculate the average sparsity
     return round(average_sparsity, 4)
 
-
-import pandas as pd
-import torch
 
 def validity_KPI(model, x, y, desired_outcome=None, device='cpu'):
     """

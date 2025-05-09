@@ -78,93 +78,95 @@ class Classifier(pl.LightningModule):
         
         return {'test_loss': loss, 'test_acc': acc}
 
-
-dataset = 'drug200'
-dataset = 'drug5'
-dataset = 'adult'
-dataset = 'iris'
-dataset = 'diabetes'
-
-if dataset == 'adult':
-    url = 'adult_with_headers_30.csv'
-    model_path = 'adult_model.pt'
-    out = 2
-elif dataset == 'drug200' or dataset == 'drug5':
-    url = dataset + '.csv'
-    model_path = 'drug200_model.pt'
-    out = 5
-elif dataset == 'iris':
-    url = 'iris_with_headers.csv'
-    model_path = 'iris_model.pt'
-    out = 3
-elif dataset == 'diabetes':
-    url = 'diabetes.csv'
-    model_path = 'diabetes_model.pt'
-    out = 2
-
-cert = CERTIFAI_PPO.from_csv(url)
-cert = CERTIFAI_PPO(dataset_path=url)
-cert2 = CERTIFAI.from_csv(url)
-
-# Prepare data
-model_input = cert.transform_x_2_input(cert.tab_dataset, pytorch=True)
-target = model_input[:, -1].long()
-cert.tab_dataset = cert.tab_dataset.iloc[:, :-1]
-cert2.tab_dataset = cert2.tab_dataset.iloc[:, :-1]
-predictors = model_input[:, :-1]
-print(predictors.shape)
-
-val_percentage = 0.1
-batch_size = 8
-
-train_loader = DataLoader(
-    TensorDataset(predictors[:-int(len(predictors) * val_percentage)],
-                  target[:-int(len(predictors) * val_percentage)]),
-    batch_size=batch_size
-)
-val_loader = DataLoader(
-    TensorDataset(predictors[-int(len(predictors) * val_percentage):],
-                  target[-int(len(predictors) * val_percentage):]),
-    batch_size=batch_size
-)
+if __name__ == '__main__':
 
 
-in_feats = predictors.shape[1]
+    dataset = 'drug200'
+    dataset = 'drug5'
+    dataset = 'adult'
+    dataset = 'iris'
+    dataset = 'diabetes'
 
+    if dataset == 'adult':
+        url = 'adult_with_headers_30.csv'
+        model_path = 'adult_model.pt'
+        out = 2
+    elif dataset == 'drug200' or dataset == 'drug5':
+        url = dataset + '.csv'
+        model_path = 'drug200_model.pt'
+        out = 5
+    elif dataset == 'iris':
+        url = 'iris_with_headers.csv'
+        model_path = 'iris_model.pt'
+        out = 3
+    elif dataset == 'diabetes':
+        url = 'diabetes.csv'
+        model_path = 'diabetes_model.pt'
+        out = 2
 
-# Check if model already exists
-if os.path.exists(model_path):
-    model = Classifier(in_feats=in_feats, out=out)
-    model.load_state_dict(torch.load(model_path))
-    print(f"Classififcation Model {model_path} loaded successfully.")
-        
-else:
-    print("Model not found, training a new one.")
-    model = Classifier(in_feats=in_feats, out=out)
+    cert = CERTIFAI_PPO.from_csv(url)
+    cert = CERTIFAI_PPO(dataset_path=url)
+    cert2 = CERTIFAI.from_csv(url)
 
-    trainer = pl.Trainer(max_epochs=max_epochs, callbacks=[early_stop])
-    trainer.fit(model, train_loader, val_loader)
+    # Prepare data
+    model_input = cert.transform_x_2_input(cert.tab_dataset, pytorch=True)
+    target = model_input[:, -1].long()
+    cert.tab_dataset = cert.tab_dataset.iloc[:, :-1]
+    cert2.tab_dataset = cert2.tab_dataset.iloc[:, :-1]
+    predictors = model_input[:, :-1]
+    print(predictors.shape)
 
-    # test the model
-    test_loader = DataLoader(
-        TensorDataset(predictors, target),
+    val_percentage = 0.1
+    batch_size = 8
+
+    train_loader = DataLoader(
+        TensorDataset(predictors[:-int(len(predictors) * val_percentage)],
+                    target[:-int(len(predictors) * val_percentage)]),
         batch_size=batch_size
     )
-    trainer.test(model, test_loader)
+    val_loader = DataLoader(
+        TensorDataset(predictors[-int(len(predictors) * val_percentage):],
+                    target[-int(len(predictors) * val_percentage):]),
+        batch_size=batch_size
+    )
 
-    # Save the model
-    torch.save(model.state_dict(), model_path)
+
+    in_feats = predictors.shape[1]
 
 
-# Generate counterfactuals using PPO
-#cert.run_inference_only(model)
-cert.run_complete_workflow(model, training_generations=25, cf_max_steps=50)
-print("-" * 20)
-print("Running Certifai")
-print("-" * 20)
-cert2.fit(model)
+    # Check if model already exists
+    if os.path.exists(model_path):
+        model = Classifier(in_feats=in_feats, out=out)
+        model.load_state_dict(torch.load(model_path))
+        print(f"Classififcation Model {model_path} loaded successfully.")
+            
+    else:
+        print("Model not found, training a new one.")
+        model = Classifier(in_feats=in_feats, out=out)
 
-# print the results
-# for result in cert.results:
-#     print(result)
+        trainer = pl.Trainer(max_epochs=max_epochs, callbacks=[early_stop])
+        trainer.fit(model, train_loader, val_loader)
+
+        # test the model
+        test_loader = DataLoader(
+            TensorDataset(predictors, target),
+            batch_size=batch_size
+        )
+        trainer.test(model, test_loader)
+
+        # Save the model
+        torch.save(model.state_dict(), model_path)
+
+
+    # Generate counterfactuals using PPO
+    #cert.run_inference_only(model)
+    cert.run_complete_workflow(model, training_generations=25, cf_max_steps=50)
+    print("-" * 20)
+    print("Running Certifai")
+    print("-" * 20)
+    cert2.fit(model)
+
+    # print the results
+    # for result in cert.results:
+    #     print(result)
 

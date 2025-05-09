@@ -504,11 +504,11 @@ class CERTIFAI:
                 constrained (bool): whether the generation of each feature
                 will be constrained by its minimum and maximum value in the
                 training set (it applies just for the not normalised scenario
-                              as there is no need otherwise)
+                            as there is no need otherwise)
                 
                 has_cat (bool): whether the input sample includes categorical
                 variables or not (they are treated differently in the distance
-                                  function used in the original paper).
+                                function used in the original paper).
                 
                 cat_ids (list): list of the names of columns containing categorical
                 values.
@@ -538,7 +538,7 @@ class CERTIFAI:
                         temp.append(repeated_values)
                     else:
                         temp.append(np.random.randint(constraint[0]*100, (constraint[1]+1)*100,
-                                                      size = (self.Population, 1))/100
+                                                    size = (self.Population, 1))/100
                                     )
                 
                 generation = np.concatenate(temp, axis = -1)
@@ -546,9 +546,9 @@ class CERTIFAI:
             else:
                 # If not constrained, we still don't want to generate values that are not totally unrealistic
                 
-                low = min(sample)
+                low = min(sample.min())
                 
-                high = max(sample)
+                high = max(sample.max())
                 
                 generation = np.random.randint(low,high+1, size = (self.Population, nfeats))
             
@@ -561,8 +561,8 @@ class CERTIFAI:
         
         else:
             raise ValueError('Normalisation option not recognised:\
-                             choose one of "None", "standard" or\
-                                 "max_scaler".')
+                            choose one of "None", "standard" or\
+                                "max_scaler".')
         
         if has_cat:
             
@@ -582,26 +582,14 @@ class CERTIFAI:
                 
             distances = self.distance(sample, generation)[0]
             
-            generation = generation
-        
         else:
             distances = self.distance(sample, generation)[0]
             
-            generation = generation.tolist()
+            generation = pd.DataFrame(generation, columns=sample.columns.tolist())
         
-            generation = pd.DataFrame(generation)
-        
-        for i in sample:
-            try:
-                # Try direct conversion first
-                generation[i] = generation[i].astype(sample[i].dtype)
-            except ValueError:
-                # If direct conversion fails for numeric types, first convert to float then to the target type
-                if pd.api.types.is_numeric_dtype(sample[i].dtype):
-                    generation[i] = generation[i].astype(float).round().astype(sample[i].dtype)
-                else:
-                    # For non-numeric types, keep the original error
-                    generation[i] = generation[i].astype(sample[i].dtype)
+        # Make sure each column has the same dtype as the sample
+        for col in sample.columns:
+            generation[col] = generation[col].astype(sample[col].dtype)
         
         return generation.values.tolist(), distances
                     
@@ -929,12 +917,8 @@ class CERTIFAI:
             self.results.append((sample, counterfacts, list(fitness_dict.values())))
             cfes.append(counterfacts[0])
         
-        # for index, result in enumerate(self.results):
-        #     sample, counterfacts, distances = result
-        #     # print the sample values and the best counterfactual
-        #     print(f"Sample {index}: {sample.values.flatten()}")
-        #     print(f"Best Counterfactual {index}: {counterfacts[0]}")
-        #     print(f"Distance {index}: {distances[0]}")
+        mean_distance = np.array([result[2][0] for result in self.results]).mean()
+        print("Mean distance of the generated counterfactuals from the original sample: ", mean_distance)
 
         print("Proximity KPI :", proximity_KPI(x, cfes, con, cat))
         print("Sparsity KPI :",sparsity_KPI(x, cfes))
