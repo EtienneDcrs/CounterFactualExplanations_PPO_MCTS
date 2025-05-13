@@ -320,8 +320,8 @@ class CERTIFAI_PPO:
             
             # If we've found a counterfactual (class changed)
             if original_prediction != modified_prediction:
-                print(f"Found counterfactual for sample {sample_index}: {original_features} -> {modified_features}")
-                print(f"Distance: {distance}, Modified features count: {modified_features_count}")
+                #print(f"Found counterfactual for sample {sample_index}: {original_features} -> {modified_features}")
+                #print(f"Distance: {distance}, Modified features count: {modified_features_count}")
                 # Higher reward for successful counterfactual with smaller distance
                 base_reward = 100.0
                 # Penalize based on distance
@@ -913,9 +913,9 @@ class CERTIFAI_PPO:
     def save(self, path):
         '''Function to save the model and the dataset'''
         try:
-            torch.save(self.policy_network.state_dict(), path + '/policy_network.pth')
-            torch.save(self.value_network.state_dict(), path + '/value_network.pth')
-            self.tab_dataset.to_csv(path + '/dataset.csv', index=False)
+            torch.save(self.policy_network.state_dict(), path + '/data/policy_network.pth')
+            torch.save(self.value_network.state_dict(), path + '/data/value_network.pth')
+            self.tab_dataset.to_csv(path + '/data/dataset.csv', index=False)
             print(f"Model and dataset saved to {path}")
         except Exception as e:
             print(f"Error saving model: {e}")
@@ -923,9 +923,9 @@ class CERTIFAI_PPO:
     def load(self, path):
         '''Function to load the pre-trained model'''
         try:
-            self.policy_network.load_state_dict(torch.load(path + '/policy_network.pth'))
-            self.value_network.load_state_dict(torch.load(path + '/value_network.pth'))
-            self.tab_dataset = pd.read_csv(path + '/dataset.csv')
+            self.policy_network.load_state_dict(torch.load(path + '/data/policy_network.pth'))
+            self.value_network.load_state_dict(torch.load(path + '/data/value_network.pth'))
+            self.tab_dataset = pd.read_csv(path + '/data/dataset.csv')
             print(f"Model loaded successfully from {path}")
             return True
         except Exception as e:

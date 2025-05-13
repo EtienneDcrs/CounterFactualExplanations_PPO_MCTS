@@ -104,6 +104,7 @@ if __name__ == '__main__':
         model_path = 'diabetes_model.pt'
         out = 2
 
+    url = os.path.join("data", url)
     cert = CERTIFAI_PPO.from_csv(url)
     cert = CERTIFAI_PPO(dataset_path=url)
     cert2 = CERTIFAI.from_csv(url)
@@ -134,6 +135,7 @@ if __name__ == '__main__':
     in_feats = predictors.shape[1]
 
 
+    model_path = os.path.join("classification_models", model_path)
     # Check if model already exists
     if os.path.exists(model_path):
         model = Classifier(in_feats=in_feats, out=out)

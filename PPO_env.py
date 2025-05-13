@@ -198,7 +198,7 @@ class CERTIFAIEnv(gym.Env):
             print(f"Error calculating distance: {e}")
             return float('inf')
 
-    def calculate_reward(self, distance, counterfactual_found, modified_prediction, stage=2):
+    def calculate_reward(self, distance, counterfactual_found, modified_prediction, stage=1):
         """
         Calculate the reward for the current step based on the training stage.
 
@@ -252,7 +252,7 @@ class CERTIFAIEnv(gym.Env):
             raise ValueError("Invalid stage. Stage must be 1 or 2.")
 
 
-    def apply_action(self, action_idx, stage=2):
+    def apply_action(self, action_idx, stage=1):
         """
         Apply the selected action to modify features, with stage-specific behaviors.
 

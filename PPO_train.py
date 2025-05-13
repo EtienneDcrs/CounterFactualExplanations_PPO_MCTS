@@ -43,6 +43,7 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
     # Create directories if they don't exist
     os.makedirs(logs_dir, exist_ok=True)
     os.makedirs(save_dir, exist_ok=True)
+    os.makedirs('data', exist_ok=True)
     
     # Determine the output size based on the dataset
     if 'adult' in dataset_path:
@@ -61,7 +62,7 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
     # Load or train the classifier model
     if model_path is None:
         model_path = f"{os.path.splitext(os.path.basename(dataset_path))[0]}_model.pt"
-    
+        model_path = os.path.join("classification_models", model_path)
     # Check if the classifier model exists, otherwise exit
     if os.path.exists(model_path):
         print(f"Loading classifier model from {model_path}")
@@ -201,6 +202,10 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
     """
     print(f"Generating counterfactuals...")
     
+    # Ensure dataset_path includes data directory if not already
+    if not dataset_path.startswith('data/') and not os.path.dirname(dataset_path):
+        dataset_path = os.path.join('data', dataset_path)
+    
     # Load the original dataset for reference
     original_data = pd.read_csv(dataset_path)
     
@@ -211,6 +216,13 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
     else:
         print(f"Generating counterfactuals for ALL samples in the dataset")
         indices_to_use = list(range(len(original_data)))
+    
+    # Ensure data directory exists
+    os.makedirs('data', exist_ok=True)
+    
+    # If save_path is provided but doesn't include data directory, add it
+    if save_path and not save_path.startswith('data/') and not os.path.dirname(save_path):
+        save_path = os.path.join('data', save_path)
     
     num_samples = len(indices_to_use)
     print(f"Total samples to process: {num_samples}")
@@ -326,6 +338,9 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
     
     # Save counterfactuals if a save path is provided
     if save_path and counterfactuals:
+        # Ensure directories exist
+        os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+        
         _save_counterfactuals(counterfactuals, original_data, save_path)
         
         # Also save the KPI-compatible dataframes
@@ -395,18 +410,19 @@ def _save_counterfactuals(counterfactuals, original_data, save_path):
     
     return counterfactuals
 
-TOTAL_TIMESTEPS = 200000  # Total timesteps for training
+TOTAL_TIMESTEPS = 1000000  # Total timesteps for training
 
 def main():
     # Specify the dataset path
-    dataset_path = 'diabetes.csv'  # Change to your dataset
+    dataset_path = 'data/diabetes.csv'  # Changed to include data directory
     
     # Create logs and model directories
     logs_dir = 'ppo_logs'
     save_dir = 'ppo_models'
+    os.makedirs('data', exist_ok=True)  # Ensure data directory exists
     
     # Define whether to continue training an existing model
-    continue_training = True
+    continue_training = False
     
     # Train the PPO model (will load and continue if it exists)
     ppo_model, env = train_ppo_for_counterfactuals(
@@ -417,14 +433,17 @@ def main():
         continue_training=continue_training
     )
     
+    # load a PPO model if it exists
+    ppo_model_path = os.path.join(save_dir, f"ppo_certifai_final_{os.path.basename(dataset_path)}.zip")
+
     if ppo_model is not None:
         # Generate counterfactuals
         counterfactuals = generate_counterfactuals(
             ppo_model=ppo_model,
             env=env,
             dataset_path=dataset_path,
-            #num_samples=20,
-            save_path=f'generated_counterfactuals_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv'
+            save_path=f'data/generated_counterfactuals_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv',
+            max_steps_per_sample=100,
         )
         
         print(f"Generated {len(counterfactuals[0])} counterfactuals successfully")

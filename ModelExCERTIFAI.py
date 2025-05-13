@@ -71,7 +71,7 @@ class Classifier(pl.LightningModule):
         self.log('val_loss', loss)
 
 # Load dataset
-url = 'diabetes.csv'
+url = 'data/diabetes.csv'
 cert = CERTIFAI.from_csv(url)
 
 # Prepare data
@@ -96,6 +96,7 @@ val_loader = DataLoader(
 )
 
 model_path = 'diabetes_model.pt'
+model_path = os.path.join("classification_models", model_path)
 # Check if model already exists
 try:
     model = Classifier()
