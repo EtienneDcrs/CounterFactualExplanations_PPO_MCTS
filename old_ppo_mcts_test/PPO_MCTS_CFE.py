@@ -1,10 +1,7 @@
 import numpy as np
 import torch
 import gymnasium as gym
-from typing import Dict, List, Tuple, Optional, Any, Union
 from collections import defaultdict
-from tqdm import tqdm
-import time
 
 class CounterfactualMCTS:
     """

@@ -8,7 +8,7 @@ import pytorch_lightning as pl
 import torch.optim as optim
 import torch.nn.functional as F
 from collections import OrderedDict
-from CERTIFAI import CERTIFAI  # Ensure this imports the updated CERTIFAI class
+from CERTIFAI.CERTIFAI import CERTIFAI  # Ensure this imports the updated CERTIFAI class
 from torch.utils.data import TensorDataset, DataLoader
 from pytorch_lightning.callbacks import EarlyStopping
 warnings.filterwarnings("ignore")

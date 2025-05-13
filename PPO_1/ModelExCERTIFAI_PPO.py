@@ -6,7 +6,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from collections import OrderedDict
 from CERTIFAI_PPO import CERTIFAI_PPO
-from CERTIFAI import CERTIFAI
+from CERTIFAI.CERTIFAI import CERTIFAI
 from torch.utils.data import TensorDataset, DataLoader
 from pytorch_lightning.callbacks import EarlyStopping
 
@@ -105,6 +105,7 @@ if __name__ == '__main__':
         out = 2
 
     url = os.path.join("data", url)
+    # Load the dataset
     cert = CERTIFAI_PPO.from_csv(url)
     cert = CERTIFAI_PPO(dataset_path=url)
     cert2 = CERTIFAI.from_csv(url)
