@@ -214,7 +214,7 @@ class CERTIFAIEnv(gym.Env):
         modified_features_count = np.sum(np.abs(original_encoded - modified_encoded) > 1e-6)
 
         # Stage 1: Finding Valid CFEs
-        if stage == 1:
+        if stage == 0:
             if counterfactual_found:
                 # Higher reward for successful counterfactual
                 base_reward = 100.0
@@ -228,14 +228,14 @@ class CERTIFAIEnv(gym.Env):
                 return reward
 
         # Stage 2: Refining CFEs to Be Closer to the Original Sample
-        elif stage == 2:
+        elif stage == 1:
             if counterfactual_found:
                 # Higher reward for successful counterfactual with smaller distance
                 base_reward = 100.0
                 # Reward based on distance
                 distance_reward = 1000 / distance if distance > 0 else 0
                 # Penalize for modifying too many features
-                sparsity_penalty = min(modified_features_count * 2, 30)  # Cap at 30
+                sparsity_penalty = min(modified_features_count * 10, 30)  # Cap at 30
 
                 # Calculate final reward
                 reward = base_reward + distance_reward - sparsity_penalty

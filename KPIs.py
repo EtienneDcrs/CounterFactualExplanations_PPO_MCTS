@@ -1,4 +1,5 @@
 
+import numpy as np
 import pandas as pd
 import torch
 from sklearn.metrics.pairwise import manhattan_distances as L1
@@ -16,7 +17,6 @@ def normalize_value(value, min_value, max_value):
 
 
 def proximity_KPI(x, y, con=None, cat=None):
-    #print(x,y)
     """
     Calculate the average distance between the true and predicted values.
     All the values are first normalized to a value between 0 and 1.
@@ -32,10 +32,15 @@ def proximity_KPI(x, y, con=None, cat=None):
     """
     assert isinstance(x, pd.DataFrame), 'This distance can be used only if input is a row of a pandas DataFrame at the moment.'
 
+    # Convert y to DataFrame if it's not already
     if not isinstance(y, pd.DataFrame):
-        y = pd.DataFrame(y, columns=x.columns.tolist())
-    else:
-        y.columns = x.columns.tolist()
+        # Check if y is a numpy array or list
+        if isinstance(y, (np.ndarray, list)):
+            # Create DataFrame with the same columns as x
+            y = pd.DataFrame(y, columns=x.columns.tolist())
+        else:
+            raise ValueError("Counterfactual samples must be a DataFrame, numpy array, or list")
+
 
     # Ensure con and cat are lists
     con = con or []

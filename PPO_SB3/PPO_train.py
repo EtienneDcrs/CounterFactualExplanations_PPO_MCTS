@@ -8,7 +8,7 @@ from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 
 from PPO_env import CERTIFAIEnv, CERTIFAIMonitorCallback
-from PPO_1.ModelExCERTIFAI_PPO import Classifier
+from Classifier_model import Classifier
 
 def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_logs', 
                                   save_dir='ppo_models', total_timesteps=100000, 
@@ -410,7 +410,7 @@ def _save_counterfactuals(counterfactuals, original_data, save_path):
     
     return counterfactuals
 
-TOTAL_TIMESTEPS = 1000000  # Total timesteps for training
+TOTAL_TIMESTEPS = 300000  # Total timesteps for training
 
 def main():
     # Specify the dataset path
@@ -422,7 +422,7 @@ def main():
     os.makedirs('data', exist_ok=True)  # Ensure data directory exists
     
     # Define whether to continue training an existing model
-    continue_training = False
+    continue_training = True
     
     # Train the PPO model (will load and continue if it exists)
     ppo_model, env = train_ppo_for_counterfactuals(

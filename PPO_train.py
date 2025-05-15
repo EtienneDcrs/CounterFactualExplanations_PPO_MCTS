@@ -6,9 +6,14 @@ import pandas as pd
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
+from tqdm import tqdm
 
 from PPO_env import CERTIFAIEnv, CERTIFAIMonitorCallback
-from PPO_1.ModelExCERTIFAI_PPO import Classifier
+from Classifier_model import Classifier
+from PPO_MCTS import CERTIFAIMCTS
+from KPIs import proximity_KPI, sparsity_KPI
+import warnings
+warnings.filterwarnings("ignore")
 
 def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_logs', 
                                   save_dir='ppo_models', total_timesteps=100000, 
@@ -170,7 +175,7 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
 
 def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None, 
                             specific_indices=None, max_steps_per_sample=100,
-                            batch_size=None):
+                            batch_size=None, use_mcts=False, mcts_simulations=10):
     """
     Generate counterfactuals using a trained PPO model for all samples in the dataset.
     
@@ -192,6 +197,10 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
     batch_size : int, optional
         Number of samples to process before saving intermediate results.
         If None, all results will be saved only at the end.
+    use_mcts : bool
+        Whether to use MCTS for action selection
+    mcts_simulations : int
+        Number of MCTS simulations per step (only used if use_mcts=True)
         
     Returns:
     --------
@@ -202,6 +211,17 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
     """
     print(f"Generating counterfactuals...")
     
+     # Initialize MCTS if needed
+    mcts = None
+    if use_mcts:
+        print(f"Initializing MCTS with {mcts_simulations} simulations per step")
+        mcts = CERTIFAIMCTS(
+            env=env,
+            ppo_model=ppo_model,
+            num_simulations=mcts_simulations
+        )
+
+
     # Ensure dataset_path includes data directory if not already
     if not dataset_path.startswith('data/') and not os.path.dirname(dataset_path):
         dataset_path = os.path.join('data', dataset_path)
@@ -236,7 +256,7 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
     total_steps = 0
     start_time = time.time()
     
-    for i, idx in enumerate(indices_to_use):
+    for i, idx in tqdm(enumerate(indices_to_use), total=num_samples, desc="Generating counterfactuals"):
         # Reset environment with specific index
         obs = env.reset()
         env.current_instance_idx = idx
@@ -252,11 +272,18 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
         original_prediction = env.original_prediction
         current_idx = env.current_instance_idx
         
-        while not done and steps < max_steps_per_sample:
-            action, _ = ppo_model.predict(obs, deterministic=True)
+        while not done and steps < max_steps_per_sample :
+            if use_mcts:
+                # Use MCTS to select action
+                action = mcts.run_mcts(root_state=obs, temperature=0.5)
+            else:
+                # Use standard PPO policy directly
+                action, _ = ppo_model.predict(obs, deterministic=True)
+                
             obs, reward, done, info = env.step(action)
             steps += 1
             
+            # If a counterfactual is found, record it if it's better than previous ones
             if info['counterfactual_found']:
                 success_count += 1
                 total_steps += steps
@@ -280,14 +307,14 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
                 break
         
         # Progress reporting (more frequent for large datasets)
-        if (i + 1) % max(1, num_samples // 100) == 0 or i == num_samples - 1:
-            elapsed = time.time() - start_time
-            time_per_sample = elapsed / (i + 1)
-            remaining = time_per_sample * (num_samples - i - 1)
+        # if (i + 1) % max(1, num_samples // 100) == 0 or i == num_samples - 1:
+        #     elapsed = time.time() - start_time
+        #     time_per_sample = elapsed / (i + 1)
+        #     remaining = time_per_sample * (num_samples - i - 1)
             
-            print(f"Progress: {i+1}/{num_samples} samples processed ({(i+1)/num_samples:.1%})")
-            print(f"Current success rate: {success_count/(i+1):.2%}")
-            print(f"Time elapsed: {elapsed:.1f}s, Est. remaining: {remaining:.1f}s")
+        #     print(f"Progress: {i+1}/{num_samples} samples processed ({(i+1)/num_samples:.1%})")
+        #     print(f"Current success rate: {success_count/(i+1):.2%}")
+        #     print(f"Time elapsed: {elapsed:.1f}s, Est. remaining: {remaining:.1f}s")
         
         # Save intermediate results if batch_size is specified
         if batch_size and (i + 1) % batch_size == 0:
@@ -322,7 +349,6 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
                 categorical_features.append(col)
         
         try:
-            from KPIs import proximity_KPI, sparsity_KPI
             
             # Calculate proximity
             proximity = proximity_KPI(original_df, counterfactual_df, 
@@ -347,7 +373,7 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
         kpi_base_path = os.path.splitext(save_path)[0]
         original_df.to_csv(f"{kpi_base_path}_original.csv", index=False)
         counterfactual_df.to_csv(f"{kpi_base_path}_counterfactual.csv", index=False)
-        print(f"KPI-compatible dataframes saved to {kpi_base_path}_original.csv and {kpi_base_path}_counterfactual.csv")
+        #print(f"KPI-compatible dataframes saved to {kpi_base_path}_original.csv and {kpi_base_path}_counterfactual.csv")
     
     return counterfactuals, original_df, counterfactual_df 
 
@@ -376,7 +402,7 @@ def _save_counterfactuals(counterfactuals, original_data, save_path):
     # Save to CSV
     df = pd.DataFrame(counterfactual_data)
     df.to_csv(save_path, index=False)
-    print(f"Counterfactuals saved to {save_path}")
+    #print(f"Counterfactuals saved to {save_path}")
     
     # Create a summary file with feature change frequencies
     if len(counterfactual_data) > 0:
@@ -410,43 +436,106 @@ def _save_counterfactuals(counterfactuals, original_data, save_path):
     
     return counterfactuals
 
-TOTAL_TIMESTEPS = 1000000  # Total timesteps for training
+TOTAL_TIMESTEPS = 300000  # Total timesteps for training
 
 def main():
     # Specify the dataset path
-    dataset_path = 'data/diabetes.csv'  # Changed to include data directory
+    dataset_path = 'data/diabetes.csv'
     
     # Create logs and model directories
     logs_dir = 'ppo_logs'
     save_dir = 'ppo_models'
-    os.makedirs('data', exist_ok=True)  # Ensure data directory exists
+    os.makedirs('data', exist_ok=True)
     
     # Define whether to continue training an existing model
     continue_training = False
     
-    # Train the PPO model (will load and continue if it exists)
-    ppo_model, env = train_ppo_for_counterfactuals(
-        dataset_path=dataset_path,
-        logs_dir=logs_dir,
-        save_dir=save_dir,
-        total_timesteps=TOTAL_TIMESTEPS, 
-        continue_training=continue_training
-    )
-    
-    # load a PPO model if it exists
-    ppo_model_path = os.path.join(save_dir, f"ppo_certifai_final_{os.path.basename(dataset_path)}.zip")
+    #ppo_load_path = os.path.join(save_dir, f"ppo_certifai_final_diabetes.zip")
 
+    if False:#os.path.exists(ppo_load_path):
+        print(f"Loading existing PPO model from {ppo_load_path}")
+        ppo_model = PPO.load(ppo_load_path)
+        ppo_model.set_env(CERTIFAIEnv(dataset_path=dataset_path, model=Classifier()))
+        env = CERTIFAIEnv(dataset_path=dataset_path, model=Classifier())
+    else:
+        # Train the PPO model (will load and continue if it exists)
+        print("Training new PPO model...")
+        ppo_model, env = train_ppo_for_counterfactuals(
+            dataset_path=dataset_path,
+            logs_dir=logs_dir,
+            save_dir=save_dir,
+            total_timesteps=TOTAL_TIMESTEPS, 
+            continue_training=continue_training
+        )
+    
     if ppo_model is not None:
-        # Generate counterfactuals
-        counterfactuals = generate_counterfactuals(
+                
+        # take the first 100 samples from the dataset
+        indices_to_use = list(range(100))
+
+        # Generate counterfactuals - with standard PPO
+        print("Generating counterfactuals using standard PPO...")
+        counterfactuals_ppo, _, _ = generate_counterfactuals(
             ppo_model=ppo_model,
             env=env,
             dataset_path=dataset_path,
-            save_path=f'data/generated_counterfactuals_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv',
+            save_path=f'data/generated_counterfactuals_ppo_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv',
             max_steps_per_sample=100,
+            use_mcts=False,
+            specific_indices=indices_to_use
         )
+
+
+        # Generate counterfactuals - with MCTS
+        print("Generating counterfactuals using MCTS...")
+        counterfactuals_mcts, _, _ = generate_counterfactuals(
+            ppo_model=ppo_model,
+            env=env,
+            dataset_path=dataset_path,
+            save_path=f'data/generated_counterfactuals_mcts_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv',
+            max_steps_per_sample=100,
+            use_mcts=True,
+            mcts_simulations=20,  # Adjust simulations as needed
+            specific_indices=indices_to_use
+        )
+
         
-        print(f"Generated {len(counterfactuals[0])} counterfactuals successfully")
+        
+        print(f"Generated {len(counterfactuals_ppo)} counterfactuals with PPO")
+        print(f"Generated {len(counterfactuals_mcts)} counterfactuals with MCTS")
+        
+        # Compare results
+        specific_indices = None  # Define specific_indices as None if not already defined
+    
+        if len(counterfactuals_ppo) > 0 and len(counterfactuals_mcts) > 0:
+            ppo_success_rate = len(counterfactuals_ppo) / len(specific_indices or range(len(pd.read_csv(dataset_path))))
+            mcts_success_rate = len(counterfactuals_mcts) / len(specific_indices or range(len(pd.read_csv(dataset_path))))
+            
+            ppo_avg_distance = np.mean([cf['distance'] for cf in counterfactuals_ppo])
+            mcts_avg_distance = np.mean([cf['distance'] for cf in counterfactuals_mcts])
+            
+            # Calculate KPIs
+            #ppo_proximity = proximity_KPI(pd.DataFrame(counterfactuals_ppo), pd.DataFrame(counterfactuals_mcts))
+            #mcts_proximity = proximity_KPI(pd.DataFrame(counterfactuals_mcts), pd.DataFrame(counterfactuals_ppo))
+
+            print(f"\nComparison:")
+            print(f"PPO success rate: {ppo_success_rate:.2%}")
+            print(f"MCTS success rate: {mcts_success_rate:.2%}")
+            if ppo_success_rate > mcts_success_rate:
+                print(f"PPO was {ppo_success_rate / mcts_success_rate:.3f} times more successful than MCTS")
+            elif mcts_success_rate > ppo_success_rate:
+                print(f"MCTS was {mcts_success_rate / ppo_success_rate:.3f} times more successful than PPO")
+            else:
+                print("PPO and MCTS had the same success rate")
+            print(f"PPO avg distance: {ppo_avg_distance:.4f}")
+            print(f"MCTS avg distance: {mcts_avg_distance:.4f}")
+
+            if ppo_avg_distance < mcts_avg_distance:
+                print(f"PPO was {mcts_avg_distance / ppo_avg_distance:.3f} times closer than MCTS")
+            elif mcts_avg_distance < ppo_avg_distance:
+                print(f"MCTS was {ppo_avg_distance / mcts_avg_distance:.3f} times closer than PPO")
+            else:
+                print("PPO and MCTS had the same average distance")
 
 if __name__ == "__main__":
     main()

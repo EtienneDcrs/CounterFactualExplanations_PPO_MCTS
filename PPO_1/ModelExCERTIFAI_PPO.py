@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 import torch.optim as optim
 import torch.nn.functional as F
 from collections import OrderedDict
-from CERTIFAI_PPO import CERTIFAI_PPO
+from PPO_1.CERTIFAI_PPO import CERTIFAI_PPO
 from CERTIFAI.CERTIFAI import CERTIFAI
 from torch.utils.data import TensorDataset, DataLoader
 from pytorch_lightning.callbacks import EarlyStopping

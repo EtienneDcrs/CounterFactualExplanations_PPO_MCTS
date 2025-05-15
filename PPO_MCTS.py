@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import copy
 from collections import defaultdict
+import graphviz
 
 class MCTSNode:
     """
@@ -39,7 +40,7 @@ class CERTIFAIMCTS:
     """
     Monte Carlo Tree Search implementation for CERTIFAI counterfactual generation.
     """
-    def __init__(self, env, ppo_model, c_puct=1.0, discount_factor=0.99, num_simulations=50):
+    def __init__(self, env, ppo_model, c_puct=1.0, discount_factor=0.99, num_simulations=10):
         """
         Initialize MCTS for counterfactual generation.
         
@@ -75,16 +76,35 @@ class CERTIFAIMCTS:
         
         # Evaluate the root node
         with torch.no_grad():
-            # Convert state to tensor
-            state_tensor = torch.tensor(root_state, dtype=torch.float32).unsqueeze(0)
-            # Get value estimate using value function from PPO
-            value = self.ppo_model.policy.value_net(state_tensor).item()
+            value = self.ppo_model.policy.predict_values(
+                torch.tensor(root_state, dtype=torch.float32).unsqueeze(0)
+            ).item()
         
         self.root.value_sum = value
         self.root.visit_count = 1
         
         return self.root
     
+    def _set_env_state(self, env, state):
+        """
+        Set the environment state based on the state representation from a node.
+        
+        Parameters:
+        - env: Copy of the environment
+        - state: State representation from MCTS node
+        """
+        # Extract features from state representation
+        # The state likely includes both original and modified features,
+        # plus possibly some metadata
+        
+        # This implementation depends on your specific environment structure
+        # Assuming state directly maps to the observation structure:
+        env.modified_features = state[:len(env.original_features)]
+ 
+        # Ensure the prediction is updated
+        env.current_prediction = env.generate_prediction(env.model, env.modified_features)
+
+
     def select(self, node):
         """
         Select a path through the tree until we reach a leaf node.
@@ -125,6 +145,25 @@ class CERTIFAIMCTS:
         """Get the policy probability for a specific action"""
         # Get probabilities from the policy network
         action_probs, _ = self.ppo_model.predict(state, deterministic=False)
+
+        with torch.no_grad():
+
+            obs_tensor = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+
+            # Get the action distribution
+            action_distribution = self.ppo_model.policy.get_distribution(obs_tensor)
+
+            # Get the probabilities
+            action_probs = torch.exp(action_distribution.log_prob(torch.arange(action_distribution.action_dim))).numpy()
+
+
+            #print("action_probabilities", action_probs)
+
+        # Convert action_probs to numpy array
+        if isinstance(action_probs, torch.Tensor):
+            action_probs = action_probs.numpy()
+        elif isinstance(action_probs, list):
+            action_probs = np.array(action_probs)
         
         # If action_probs is a scalar (single action), convert to list
         if np.isscalar(action_probs):
@@ -158,8 +197,33 @@ class CERTIFAIMCTS:
         self._set_env_state(virtual_env, leaf_node.state)
         
         # Get policy prediction for this state
-        action_probs, _ = self.ppo_model.predict(leaf_node.state, deterministic=False)
-        
+        #action_probs, _states = self.ppo_model.predict(leaf_node.state, deterministic=False)
+
+
+
+        with torch.no_grad():
+
+            obs_tensor = torch.tensor(leaf_node.state, dtype=torch.float32).unsqueeze(0)
+
+            # Get the action distribution
+            action_distribution = self.ppo_model.policy.get_distribution(obs_tensor)
+
+            # Get the probabilities
+            action_probs = torch.exp(action_distribution.log_prob(torch.arange(action_distribution.action_dim))).numpy()
+
+            # Sample an action
+            action = action_distribution.sample().squeeze().numpy()
+
+
+            #print("action_probabilities", action_probs)
+            #print("action", action)
+
+        # Convert action_probs to numpy array
+        if isinstance(action_probs, torch.Tensor):
+            action_probs = action_probs.numpy()
+        elif isinstance(action_probs, list):
+            action_probs = np.array(action_probs)
+
         # If action_probs is a scalar, convert to an array
         if np.isscalar(action_probs):
             action_probs = np.array([action_probs])
@@ -171,7 +235,7 @@ class CERTIFAIMCTS:
         # Expand the node with each chosen action
         for action_idx in top_action_indices:
             # Skip actions with very low probability
-            if action_probs[action_idx] < 0.01:
+            if action_probs[action_idx] < 0.005:
                 continue
                 
             # Execute the action in the virtual environment
@@ -233,10 +297,10 @@ class CERTIFAIMCTS:
         else:
             # Use the value model to estimate the value of this state
             with torch.no_grad():
-                # Convert state to tensor
-                state_tensor = torch.tensor(node.state, dtype=torch.float32).unsqueeze(0)
-                # Get value estimate using value function from PPO
-                value = self.ppo_model.policy.value_net(state_tensor).item()
+                # Use the proper SB3 PPO value prediction method
+                value = self.ppo_model.policy.predict_values(
+                    torch.tensor(node.state, dtype=torch.float32).unsqueeze(0)
+                ).item()
         
         # Initialize the node's statistics
         node.visit_count = 1
@@ -383,4 +447,22 @@ class CERTIFAIMCTS:
         
         # Fallback to PPO policy if no visits
         action, _ = self.ppo_model.predict(root_state, deterministic=(temperature == 0))
+        #self.draw_tree()
         return action
+    
+
+    def draw_tree(self):
+        """
+        Draw the MCTS tree using graphviz.
+        """
+
+        dot = graphviz.Digraph()
+        dot.node('root', 'Root Node')
+        for action, child in self.root.children.items():
+            dot.node(str(action), str(action))
+            dot.edge('root', str(action))
+            self._draw_tree_recursive(dot, child)
+        dot.render('mcts_tree', format='png', cleanup=True)
+        dot.view()
+        
+        return
