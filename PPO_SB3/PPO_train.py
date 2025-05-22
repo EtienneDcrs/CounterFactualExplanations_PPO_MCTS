@@ -7,7 +7,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 
-from PPO_env import CERTIFAIEnv, CERTIFAIMonitorCallback
+from PPO_env import PPOEnv, CERTIFAIMonitorCallback
 from Classifier_model import Classifier
 
 def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_logs', 
@@ -35,7 +35,7 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
     --------
     model : PPO
         Trained PPO model
-    env : CERTIFAIEnv
+    env : PPOEnv
         Environment used for training
     """
     print(f"Starting counterfactual generation with PPO for dataset: {dataset_path}")
@@ -79,8 +79,8 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
         return None, None
     
     # Create the CERTIFAI environment
-    env = CERTIFAIEnv(dataset_path=dataset_path, model=classifier)
-    eval_env = CERTIFAIEnv(dataset_path=dataset_path, model=classifier)
+    env = PPOEnv(dataset_path=dataset_path, model=classifier)
+    eval_env = PPOEnv(dataset_path=dataset_path, model=classifier)
     
     # Define PPO model path
     ppo_model_path = os.path.join(save_dir, f"ppo_certifai_final_{os.path.basename(dataset_path)}.zip")
@@ -178,7 +178,7 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
     -----------
     ppo_model : PPO
         Trained PPO model
-    env : CERTIFAIEnv
+    env : PPOEnv
         Environment for counterfactual generation
     dataset_path : str
         Path to the dataset CSV file

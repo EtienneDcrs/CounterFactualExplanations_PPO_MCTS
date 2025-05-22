@@ -8,7 +8,7 @@ import time
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 
-class CERTIFAIEnv(gym.Env):
+class PPOEnv(gym.Env):
     def __init__(self, dataset_path=None, numpy_dataset=None, model=None, distance_metric=None):
         """
         Initialize the CERTIFAI environment for counterfactual generation.
@@ -19,7 +19,7 @@ class CERTIFAIEnv(gym.Env):
         - model: The classification model we're generating counterfactuals for
         - distance_metric: Distance function to use (default: Euclidean distance)
         """
-        super(CERTIFAIEnv, self).__init__()
+        super(PPOEnv, self).__init__()
         
         # Load dataset
         self.dataset_path = dataset_path

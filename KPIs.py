@@ -158,14 +158,6 @@ def validity_KPI(model, x, y, desired_outcome=None, device='cpu'):
 
     return round(validity_percentage, 2)
 
-# Example usage
-# Assuming `model` is your trained PyTorch model
-# x = pd.DataFrame({'age': [25, 30, 45], 'income': [30000, 50000, 70000]})
-# y = pd.DataFrame({'age': [28, 32, 48], 'income': [32000, 52000, 72000]})
-# desired_outcome = 1  # Assume 1 is the desired outcome
-# device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-# print(validity_KPI(model, x, y, desired_outcome, device))
 
 
 if __name__ == "__main__":

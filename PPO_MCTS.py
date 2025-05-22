@@ -45,7 +45,7 @@ class CERTIFAIMCTS:
         Initialize MCTS for counterfactual generation.
         
         Parameters:
-        - env: CERTIFAIEnv instance
+        - env: PPOEnv instance
         - ppo_model: Trained PPO model (for policy and value estimates)
         - c_puct: Exploration constant for PUCT formula
         - discount_factor: Discount factor for future rewards (gamma)

@@ -3,13 +3,13 @@ import time
 import torch
 import numpy as np
 import pandas as pd
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO,A2C
 from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 from tqdm import tqdm
 
-from PPO_env import CERTIFAIEnv, CERTIFAIMonitorCallback
-from Classifier_model import Classifier
+from PPO_env import PPOEnv, CERTIFAIMonitorCallback
+from Classifier_model import Classifier, train_model
 from PPO_MCTS import CERTIFAIMCTS
 from KPIs import proximity_KPI, sparsity_KPI
 import warnings
@@ -40,7 +40,7 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
     --------
     model : PPO
         Trained PPO model
-    env : CERTIFAIEnv
+    env : PPOEnv
         Environment used for training
     """
     print(f"Starting counterfactual generation with PPO for dataset: {dataset_path}")
@@ -51,14 +51,11 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
     os.makedirs('data', exist_ok=True)
     
     # Determine the output size based on the dataset
-    if 'adult' in dataset_path:
-        out = 2
-    elif 'drug' in dataset_path:
-        out = 5
-    elif 'iris' in dataset_path:
-        out = 3
-    elif 'diabetes' in dataset_path:
-        out = 2
+    out = None
+    if dataset_path.endswith('.csv'):
+        # Load the dataset to determine the number of classes
+        dataset = pd.read_csv(dataset_path)
+        out = len(dataset.iloc[:, -1].unique())
     else:
         # Default case - try to determine from the dataset
         dataset = pd.read_csv(dataset_path)
@@ -69,23 +66,25 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
         model_path = f"{os.path.splitext(os.path.basename(dataset_path))[0]}_model.pt"
         model_path = os.path.join("classification_models", model_path)
     # Check if the classifier model exists, otherwise exit
-    if os.path.exists(model_path):
-        print(f"Loading classifier model from {model_path}")
-        # Load dataset to determine input features
-        dataset = pd.read_csv(dataset_path)
-        in_feats = len(dataset.columns) - 1  # Exclude target variable
-        
-        # Load the classifier model
-        classifier = Classifier(in_feats=in_feats, out=out)
-        classifier.load_state_dict(torch.load(model_path))
-        classifier.eval()  # Set to evaluation mode
-    else:
-        print(f"Classifier model not found at {model_path}. Please train the classifier first.")
-        return None, None
+
+    if not os.path.exists(model_path):
+        print(f"Classifier model not found at {model_path}. Training a new one.")
+        train_model(dataset_path, model_path)
+
+    print(f"Loading classifier model from {model_path}")
+    # Load dataset to determine input features
+    dataset = pd.read_csv(dataset_path)
+    in_feats = len(dataset.columns) - 1  # Exclude target variable
+    
+    # Load the classifier model
+    classifier = Classifier(in_feats=in_feats, out=out)
+    classifier.load_state_dict(torch.load(model_path))
+    classifier.eval()  # Set to evaluation mode
+
     
     # Create the CERTIFAI environment
-    env = CERTIFAIEnv(dataset_path=dataset_path, model=classifier)
-    eval_env = CERTIFAIEnv(dataset_path=dataset_path, model=classifier)
+    env = PPOEnv(dataset_path=dataset_path, model=classifier)
+    eval_env = PPOEnv(dataset_path=dataset_path, model=classifier)
     
     # Define PPO model path
     ppo_model_path = os.path.join(save_dir, f"ppo_certifai_final_{os.path.basename(dataset_path)}.zip")
@@ -183,7 +182,7 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
     -----------
     ppo_model : PPO
         Trained PPO model
-    env : CERTIFAIEnv
+    env : PPOEnv
         Environment for counterfactual generation
     dataset_path : str
         Path to the dataset CSV file
@@ -448,15 +447,15 @@ def main():
     os.makedirs('data', exist_ok=True)
     
     # Define whether to continue training an existing model
-    continue_training = False
+    continue_training = True
     
     #ppo_load_path = os.path.join(save_dir, f"ppo_certifai_final_diabetes.zip")
 
     if False:#os.path.exists(ppo_load_path):
         print(f"Loading existing PPO model from {ppo_load_path}")
         ppo_model = PPO.load(ppo_load_path)
-        ppo_model.set_env(CERTIFAIEnv(dataset_path=dataset_path, model=Classifier()))
-        env = CERTIFAIEnv(dataset_path=dataset_path, model=Classifier())
+        ppo_model.set_env(PPOEnv(dataset_path=dataset_path, model=Classifier()))
+        env = PPOEnv(dataset_path=dataset_path, model=Classifier())
     else:
         # Train the PPO model (will load and continue if it exists)
         print("Training new PPO model...")
@@ -495,7 +494,7 @@ def main():
             save_path=f'data/generated_counterfactuals_mcts_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv',
             max_steps_per_sample=100,
             use_mcts=True,
-            mcts_simulations=20,  # Adjust simulations as needed
+            mcts_simulations=15,  # Adjust simulations as needed
             specific_indices=indices_to_use
         )
 
