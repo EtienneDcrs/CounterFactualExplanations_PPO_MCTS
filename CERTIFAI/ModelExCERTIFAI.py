@@ -8,7 +8,7 @@ import pytorch_lightning as pl
 import torch.optim as optim
 import torch.nn.functional as F
 from collections import OrderedDict
-from CERTIFAI.CERTIFAI import CERTIFAI  # Ensure this imports the updated CERTIFAI class
+from CERTIFAI import CERTIFAI 
 from torch.utils.data import TensorDataset, DataLoader
 from pytorch_lightning.callbacks import EarlyStopping
 warnings.filterwarnings("ignore")
@@ -71,7 +71,7 @@ class Classifier(pl.LightningModule):
         self.log('val_loss', loss)
 
 # Load dataset
-url = 'data/diabetes.csv'
+url = 'data/diabetes_100.csv'
 cert = CERTIFAI.from_csv(url)
 
 # Prepare data
@@ -99,7 +99,7 @@ model_path = 'diabetes_model.pt'
 model_path = os.path.join("classification_models", model_path)
 # Check if model already exists
 try:
-    model = Classifier()
+    model = Classifier(in_feats=predictors.shape[1])
     model.load_state_dict(torch.load(model_path))
     print("Model loaded successfully.")
 except FileNotFoundError:
@@ -113,8 +113,8 @@ except FileNotFoundError:
     # Save the model
     torch.save(model.state_dict(), model_path)
 
-# Generate counterfactuals using PPO
-cert.fit(model, generations=10, verbose=True)
+# Generate counterfactual
+cert.fit(model, generations=15, verbose=True)
 
 # Evaluate robustness and fairness
 print("(Unnormalised) model's robustness:")

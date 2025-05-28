@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from PPO_env import PPOEnv, CERTIFAIMonitorCallback
 from Classifier_model import Classifier, train_model
-from PPO_MCTS import CERTIFAIMCTS
+from PPO_MCTS import PPOMCTS
 from KPIs import proximity_KPI, sparsity_KPI
 import warnings
 warnings.filterwarnings("ignore")
@@ -98,7 +98,7 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
                 ppo_model_path, 
                 env=env,
                 tensorboard_log=logs_dir,
-                custom_objects={"learning_rate": 3e-4}  # Ensure consistent learning rate
+                custom_objects={"learning_rate": 3e-4} 
             )
             print("Existing PPO model loaded successfully. Continuing training...")
             
@@ -214,7 +214,7 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
     mcts = None
     if use_mcts:
         print(f"Initializing MCTS with {mcts_simulations} simulations per step")
-        mcts = CERTIFAIMCTS(
+        mcts = PPOMCTS(
             env=env,
             ppo_model=ppo_model,
             num_simulations=mcts_simulations
@@ -306,14 +306,14 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
                 break
         
         # Progress reporting (more frequent for large datasets)
-        # if (i + 1) % max(1, num_samples // 100) == 0 or i == num_samples - 1:
-        #     elapsed = time.time() - start_time
-        #     time_per_sample = elapsed / (i + 1)
-        #     remaining = time_per_sample * (num_samples - i - 1)
-            
-        #     print(f"Progress: {i+1}/{num_samples} samples processed ({(i+1)/num_samples:.1%})")
-        #     print(f"Current success rate: {success_count/(i+1):.2%}")
-        #     print(f"Time elapsed: {elapsed:.1f}s, Est. remaining: {remaining:.1f}s")
+        if (i + 1) % max(1, num_samples // 100) == 0 or i == num_samples - 1:
+            elapsed = time.time() - start_time
+            time_per_sample = elapsed / (i + 1)
+            remaining = time_per_sample * (num_samples - i - 1)
+          
+            print(f"Progress: {i+1}/{num_samples} samples processed ({(i+1)/num_samples:.1%})")
+            print(f"Current success rate: {success_count/(i+1):.2%}")
+            print(f"Time elapsed: {elapsed:.1f}s, Est. remaining: {remaining:.1f}s")
         
         # Save intermediate results if batch_size is specified
         if batch_size and (i + 1) % batch_size == 0:
@@ -439,23 +439,62 @@ TOTAL_TIMESTEPS = 300000  # Total timesteps for training
 
 def main():
     # Specify the dataset path
-    dataset_path = 'data/diabetes.csv'
-    
-    # Create logs and model directories
+    dataset_path = 'data/adult.csv'
+    model_path = None  # Path to the ppo model, if any
     logs_dir = 'ppo_logs'
     save_dir = 'ppo_models'
     os.makedirs('data', exist_ok=True)
-    
-    # Define whether to continue training an existing model
-    continue_training = True
-    
-    #ppo_load_path = os.path.join(save_dir, f"ppo_certifai_final_diabetes.zip")
 
-    if False:#os.path.exists(ppo_load_path):
-        print(f"Loading existing PPO model from {ppo_load_path}")
-        ppo_model = PPO.load(ppo_load_path)
-        ppo_model.set_env(PPOEnv(dataset_path=dataset_path, model=Classifier()))
-        env = PPOEnv(dataset_path=dataset_path, model=Classifier())
+    # Define whether to continue training an existing model
+    continue_training = False
+    
+    out = None
+    if dataset_path.endswith('.csv'):
+        # Load the dataset to determine the number of classes
+        dataset = pd.read_csv(dataset_path)
+        out = len(dataset.iloc[:, -1].unique())
+    else:
+        # Default case - try to determine from the dataset
+        dataset = pd.read_csv(dataset_path)
+        out = len(dataset.iloc[:, -1].unique())
+    in_feats = len(dataset.columns) - 1  # Exclude target variable
+    
+    # Load or train the classifier model
+    if model_path is None:
+        model_path = f"{os.path.splitext(os.path.basename(dataset_path))[0]}_model.pt"
+        model_path = os.path.join("classification_models", model_path)
+    # Check if the classifier model exists, otherwise exit
+
+    if not os.path.exists(model_path):
+        print(f"Classifier model not found at {model_path}. Training a new one.")
+        train_model(dataset_path, model_path)
+
+    print(f"Loading classifier model from {model_path}")
+    # Load dataset to determine input features
+    dataset = pd.read_csv(dataset_path)
+    
+    # Load the classifier model
+    classifier = Classifier(in_feats=in_feats, out=out)
+    classifier.load_state_dict(torch.load(model_path))
+    classifier.eval()  # Set to evaluation mode
+    ppo_model_path = os.path.join(save_dir, f"ppo_certifai_final_{os.path.basename(dataset_path)}.zip")
+    env = PPOEnv(dataset_path=dataset_path, model=classifier)
+
+    # Check if a PPO model already exists and load it if continue_training is True
+    model_exists = os.path.exists(ppo_model_path)
+    if model_exists and continue_training:
+        print(f"Loading existing PPO model from {ppo_model_path}")
+        try:
+            ppo_model = PPO.load(
+                ppo_model_path, 
+                env=env,
+                tensorboard_log=logs_dir,
+                custom_objects={"learning_rate": 3e-4} 
+            )
+        except Exception as e:
+            print(f"Error loading existing model: {e}")
+            print("Creating a new PPO model instead...")
+            model_exists = False
     else:
         # Train the PPO model (will load and continue if it exists)
         print("Training new PPO model...")
@@ -494,7 +533,7 @@ def main():
             save_path=f'data/generated_counterfactuals_mcts_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv',
             max_steps_per_sample=100,
             use_mcts=True,
-            mcts_simulations=15,  # Adjust simulations as needed
+            mcts_simulations=20,  # Adjust simulations as needed
             specific_indices=indices_to_use
         )
 
@@ -536,5 +575,5 @@ def main():
             else:
                 print("PPO and MCTS had the same average distance")
 
-if __name__ == "__main__":
-    main()
+import cProfile
+cProfile.run('main()', 'output.prof')

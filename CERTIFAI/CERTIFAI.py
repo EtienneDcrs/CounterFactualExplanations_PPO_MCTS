@@ -917,6 +917,12 @@ class CERTIFAI:
             self.results.append((sample, counterfacts, list(fitness_dict.values())))
             cfes.append(counterfacts[0])
         
+        # Save the counterfactuals in a csv file
+        cfes = pd.DataFrame(cfes)
+        cfes.columns = x.columns.tolist()
+        cfes.to_csv('counterfactuals.csv', index=False)
+        
+
         mean_distance = np.array([result[2][0] for result in self.results]).mean()
         print("Mean distance of the generated counterfactuals from the original sample: ", mean_distance)
 

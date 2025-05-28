@@ -36,7 +36,7 @@ class MCTSNode:
         self.children[action] = child_node
 
 
-class CERTIFAIMCTS:
+class PPOMCTS:
     """
     Monte Carlo Tree Search implementation for CERTIFAI counterfactual generation.
     """
