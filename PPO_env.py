@@ -50,6 +50,8 @@ class PPOEnv(gym.Env):
         self.current_instance_idx = None
         self.original_features = None
         self.modified_features = None
+        self.original_encoded = None
+        self.modified_encoded = None
         self.sample_distance = float('inf')
         self.steps_taken = 0
 
@@ -98,6 +100,9 @@ class PPOEnv(gym.Env):
         self.original_features = self.tab_dataset.iloc[self.current_instance_idx].values[:-1]
         self.modified_features = self.original_features.copy()
 
+        self.original_encoded = self.encode_features(self.original_features)
+        self.modified_encoded = self.encode_features(self.modified_features)
+
         # Get the original prediction and store it for later use
         self.original_prediction = self.generate_prediction(self.model, self.original_features)
 
@@ -127,6 +132,7 @@ class PPOEnv(gym.Env):
 
         # Apply the selected action to modify features
         self.modified_features = self.apply_action(action)
+        self.modified_encoded = self.encode_features(self.modified_features)
 
         # Get the new prediction and store it for later use
         modified_prediction = self.generate_prediction(self.model, self.modified_features)
@@ -162,8 +168,6 @@ class PPOEnv(gym.Env):
     def _get_observation(self):
         """Create observation vector from current state."""
         # Encode features for the observation
-        original_encoded = self.encode_features(self.original_features)
-        modified_encoded = self.encode_features(self.modified_features)
 
         # Add metadata to the observation: steps taken, distance, normalized progress
         distance = self.calculate_normalized_distance()
@@ -172,8 +176,8 @@ class PPOEnv(gym.Env):
 
         # Combine all into observation vector
         observation = np.concatenate([
-            original_encoded,
-            modified_encoded,
+            self.original_encoded,
+            self.modified_encoded,
             [steps_normalized, distance_normalized, float(self.original_prediction)]
         ]).astype(np.float32)
 
@@ -184,11 +188,9 @@ class PPOEnv(gym.Env):
 
     def calculate_distance(self):
         """Calculate the distance between original and modified features."""
-        original_encoded = self.encode_features(self.original_features)
-        modified_encoded = self.encode_features(self.modified_features)
         # Calculate distance using the specified distance metric
         try:
-            distance = self.distance(original_encoded, modified_encoded)
+            distance = self.distance(self.original_encoded, self.modified_encoded)
             return distance
         except Exception as e:
             return float('inf')
@@ -198,8 +200,6 @@ class PPOEnv(gym.Env):
         Calculate normalized distance between original and modified features.
         Uses the sum of ratios (min of x/y or y/x) for each feature dimension.
         """
-        original_encoded = self.encode_features(self.original_features)
-        modified_encoded = self.encode_features(self.modified_features)
 
         # Add small epsilon to avoid division by zero
         epsilon = 1e-10
@@ -208,32 +208,29 @@ class PPOEnv(gym.Env):
         normalized_distance = 0.0
 
         # Calculate ratio for each feature
-        for orig, mod in zip(original_encoded, modified_encoded):
+        for orig, mod in zip(self.original_encoded, self.modified_encoded):
             # Ensure values are positive and non-zero
+            if orig == mod:
+                continue
+
             orig = abs(orig) + epsilon
             mod = abs(mod) + epsilon
 
+
             # Calculate ratio and its inverse
-            ratio = orig / mod
-            inverse_ratio = mod / orig
+            ratio = orig / mod  if orig > mod else mod / orig
 
-            # Take the minimum (will always be <= 1)
-            min_ratio = min(ratio, inverse_ratio)
+            normalized_distance += ratio
+            #print(orig,mod, ratio, normalized_distance)
 
-            # Add to normalized distance (1 - ratio to make smaller ratios mean larger distance)
-            normalized_distance += (1 - min_ratio)
-
-        distance = normalized_distance / len(original_encoded)  # Average over features
-        return distance
+        return normalized_distance
 
     def calculate_reward(self, distance, counterfactual_found, modified_prediction):
         """
         Calculate the reward for the current step.
         """
         # Calculate the number of modified features (for sparsity)
-        original_encoded = self.encode_features(self.original_features)
-        modified_encoded = self.encode_features(self.modified_features)
-        modified_features_count = np.sum(np.abs(original_encoded - modified_encoded) > 1e-6)
+        #modified_features_count = np.sum(np.abs(self.original_encoded - self.modified_encoded) > 1e-6)
 
         if counterfactual_found:
             # Higher reward for successful counterfactual

@@ -298,7 +298,7 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
                     'distance': info['distance'],
                     'steps': steps
                 })
-                
+                print(f"original_data : {original_features}, modified_data : {info['modified_features']}, distance : {info['distance']}, steps : {steps}")
                 # Add to dataframes for KPI calculation
                 original_samples.append(original_features)
                 counterfactual_samples.append(info['modified_features'])
@@ -306,14 +306,14 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
                 break
         
         # Progress reporting (more frequent for large datasets)
-        if (i + 1) % max(1, num_samples // 100) == 0 or i == num_samples - 1:
-            elapsed = time.time() - start_time
-            time_per_sample = elapsed / (i + 1)
-            remaining = time_per_sample * (num_samples - i - 1)
+        # if (i + 1) % max(1, num_samples // 100) == 0 or i == num_samples - 1:
+        #     elapsed = time.time() - start_time
+        #     time_per_sample = elapsed / (i + 1)
+        #     remaining = time_per_sample * (num_samples - i - 1)
           
-            print(f"Progress: {i+1}/{num_samples} samples processed ({(i+1)/num_samples:.1%})")
-            print(f"Current success rate: {success_count/(i+1):.2%}")
-            print(f"Time elapsed: {elapsed:.1f}s, Est. remaining: {remaining:.1f}s")
+        #     print(f"Progress: {i+1}/{num_samples} samples processed ({(i+1)/num_samples:.1%})")
+        #     print(f"Current success rate: {success_count/(i+1):.2%}")
+        #     print(f"Time elapsed: {elapsed:.1f}s, Est. remaining: {remaining:.1f}s")
         
         # Save intermediate results if batch_size is specified
         if batch_size and (i + 1) % batch_size == 0:
@@ -435,11 +435,12 @@ def _save_counterfactuals(counterfactuals, original_data, save_path):
     
     return counterfactuals
 
-TOTAL_TIMESTEPS = 300000  # Total timesteps for training
+TOTAL_TIMESTEPS = 30000  # Total timesteps for training
 
 def main():
     # Specify the dataset path
     dataset_path = 'data/adult.csv'
+    dataset_path = 'data/diabetes.csv'
     model_path = None  # Path to the ppo model, if any
     logs_dir = 'ppo_logs'
     save_dir = 'ppo_models'
@@ -447,6 +448,7 @@ def main():
 
     # Define whether to continue training an existing model
     continue_training = False
+    new_model = True  # Set to True if you want to train a new model regardless of existing ones
     
     out = None
     if dataset_path.endswith('.csv'):
@@ -482,7 +484,7 @@ def main():
 
     # Check if a PPO model already exists and load it if continue_training is True
     model_exists = os.path.exists(ppo_model_path)
-    if model_exists and continue_training:
+    if model_exists and not continue_training and not new_model:
         print(f"Loading existing PPO model from {ppo_model_path}")
         try:
             ppo_model = PPO.load(
@@ -546,8 +548,8 @@ def main():
         specific_indices = None  # Define specific_indices as None if not already defined
     
         if len(counterfactuals_ppo) > 0 and len(counterfactuals_mcts) > 0:
-            ppo_success_rate = len(counterfactuals_ppo) / len(specific_indices or range(len(pd.read_csv(dataset_path))))
-            mcts_success_rate = len(counterfactuals_mcts) / len(specific_indices or range(len(pd.read_csv(dataset_path))))
+            ppo_success_rate = len(counterfactuals_ppo) / len(specific_indices) if specific_indices else len(counterfactuals_ppo) / range(len(pd.read_csv(dataset_path)))
+            mcts_success_rate = len(counterfactuals_mcts) / len(specific_indices) if specific_indices else len(counterfactuals_ppo) / range(len(pd.read_csv(dataset_path)))
             
             ppo_avg_distance = np.mean([cf['distance'] for cf in counterfactuals_ppo])
             mcts_avg_distance = np.mean([cf['distance'] for cf in counterfactuals_mcts])
