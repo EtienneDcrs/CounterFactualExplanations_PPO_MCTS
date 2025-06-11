@@ -113,25 +113,10 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
     # Create a new model if needed
     if not model_exists or not continue_training:
         print("Creating a new PPO agent...")
-        model = PPO(
-            policy="MlpPolicy",
-            env=env,
-            learning_rate=3e-4,
-            n_steps=2048,
-            batch_size=64,
-            n_epochs=10,
-            gamma=0.99,
-            gae_lambda=0.95,
-            clip_range=0.2,
-            clip_range_vf=None,
-            ent_coef=0.01,
-            vf_coef=0.5,
-            max_grad_norm=0.5,
-            use_sde=False,
-            sde_sample_freq=-1,
-            target_kl=None,
-            tensorboard_log=logs_dir,
-            verbose=1
+        model = PPO(policy="MlpPolicy",env=env,learning_rate=3e-4,n_steps=2048,batch_size=64,
+            n_epochs=10,gamma=0.99,gae_lambda=0.95,clip_range=0.2,clip_range_vf=None,ent_coef=0.01,
+            vf_coef=0.5,max_grad_norm=0.5,use_sde=False,sde_sample_freq=-1,target_kl=None,
+            tensorboard_log=logs_dir,verbose=1
         )
     
     # Create the callbacks
@@ -173,10 +158,9 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
     return model, env
 
 def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None, 
-                            specific_indices=None, max_steps_per_sample=100,
-                            batch_size=None, use_mcts=False, mcts_simulations=10):
+                            specific_indices=None, max_steps_per_sample=100, use_mcts=False, mcts_simulations=10):
     """
-    Generate counterfactuals using a trained PPO model for all samples in the dataset.
+    Generate counterfactuals using a trained PPO model for samples in the dataset.
     
     Parameters:
     -----------
@@ -193,9 +177,6 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
         If None, all samples in the dataset will be used
     max_steps_per_sample : int
         Maximum steps to attempt for each counterfactual
-    batch_size : int, optional
-        Number of samples to process before saving intermediate results.
-        If None, all results will be saved only at the end.
     use_mcts : bool
         Whether to use MCTS for action selection
     mcts_simulations : int
@@ -304,23 +285,7 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
                 counterfactual_samples.append(info['modified_features'])
                 
                 break
-        
-        # Progress reporting (more frequent for large datasets)
-        # if (i + 1) % max(1, num_samples // 100) == 0 or i == num_samples - 1:
-        #     elapsed = time.time() - start_time
-        #     time_per_sample = elapsed / (i + 1)
-        #     remaining = time_per_sample * (num_samples - i - 1)
-          
-        #     print(f"Progress: {i+1}/{num_samples} samples processed ({(i+1)/num_samples:.1%})")
-        #     print(f"Current success rate: {success_count/(i+1):.2%}")
-        #     print(f"Time elapsed: {elapsed:.1f}s, Est. remaining: {remaining:.1f}s")
-        
-        # Save intermediate results if batch_size is specified
-        if batch_size and (i + 1) % batch_size == 0:
-            intermediate_save_path = f"{os.path.splitext(save_path)[0]}_batch_{(i+1)//batch_size}.csv"
-            _save_counterfactuals(counterfactuals, original_data, intermediate_save_path)
-            print(f"Saved intermediate results to {intermediate_save_path}")
-    
+
     # Create dataframes for KPI calculation
     original_df = pd.DataFrame(original_samples, columns=feature_columns)
     counterfactual_df = pd.DataFrame(counterfactual_samples, columns=feature_columns)
@@ -372,7 +337,6 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
         kpi_base_path = os.path.splitext(save_path)[0]
         original_df.to_csv(f"{kpi_base_path}_original.csv", index=False)
         counterfactual_df.to_csv(f"{kpi_base_path}_counterfactual.csv", index=False)
-        #print(f"KPI-compatible dataframes saved to {kpi_base_path}_original.csv and {kpi_base_path}_counterfactual.csv")
     
     return counterfactuals, original_df, counterfactual_df 
 
@@ -401,7 +365,6 @@ def _save_counterfactuals(counterfactuals, original_data, save_path):
     # Save to CSV
     df = pd.DataFrame(counterfactual_data)
     df.to_csv(save_path, index=False)
-    #print(f"Counterfactuals saved to {save_path}")
     
     # Create a summary file with feature change frequencies
     if len(counterfactual_data) > 0:
@@ -429,26 +392,23 @@ def _save_counterfactuals(counterfactuals, original_data, save_path):
         
         # Create summary DataFrame
         summary_df = pd.DataFrame.from_dict(feature_changes, orient='index')
-        summary_df.sort_values('change_percentage', ascending=False, inplace=True)
-        summary_df.to_csv(summary_path)
-        print(f"Feature change summary saved to {summary_path}")
-    
+        summary_df.to_csv(summary_path)    
     return counterfactuals
 
-TOTAL_TIMESTEPS = 30000  # Total timesteps for training
+TOTAL_TIMESTEPS = 3000  # Total timesteps for training
 
 def main():
-    # Specify the dataset path
     dataset_path = 'data/adult.csv'
     dataset_path = 'data/diabetes.csv'
+    dataset_path = 'data/drug200.csv'
     model_path = None  # Path to the ppo model, if any
     logs_dir = 'ppo_logs'
     save_dir = 'ppo_models'
     os.makedirs('data', exist_ok=True)
 
     # Define whether to continue training an existing model
-    continue_training = False
-    new_model = True  # Set to True if you want to train a new model regardless of existing ones
+    continue_training = True
+    new_model = False  # Set to True if you want to train a new model regardless of existing ones
     
     out = None
     if dataset_path.endswith('.csv'):
@@ -525,7 +485,6 @@ def main():
             specific_indices=indices_to_use
         )
 
-
         # Generate counterfactuals - with MCTS
         print("Generating counterfactuals using MCTS...")
         counterfactuals_mcts, _, _ = generate_counterfactuals(
@@ -538,44 +497,6 @@ def main():
             mcts_simulations=20,  # Adjust simulations as needed
             specific_indices=indices_to_use
         )
-
-        
-        
-        print(f"Generated {len(counterfactuals_ppo)} counterfactuals with PPO")
-        print(f"Generated {len(counterfactuals_mcts)} counterfactuals with MCTS")
-        
-        # Compare results
-        specific_indices = None  # Define specific_indices as None if not already defined
-    
-        if len(counterfactuals_ppo) > 0 and len(counterfactuals_mcts) > 0:
-            ppo_success_rate = len(counterfactuals_ppo) / len(specific_indices) if specific_indices else len(counterfactuals_ppo) / range(len(pd.read_csv(dataset_path)))
-            mcts_success_rate = len(counterfactuals_mcts) / len(specific_indices) if specific_indices else len(counterfactuals_ppo) / range(len(pd.read_csv(dataset_path)))
-            
-            ppo_avg_distance = np.mean([cf['distance'] for cf in counterfactuals_ppo])
-            mcts_avg_distance = np.mean([cf['distance'] for cf in counterfactuals_mcts])
-            
-            # Calculate KPIs
-            #ppo_proximity = proximity_KPI(pd.DataFrame(counterfactuals_ppo), pd.DataFrame(counterfactuals_mcts))
-            #mcts_proximity = proximity_KPI(pd.DataFrame(counterfactuals_mcts), pd.DataFrame(counterfactuals_ppo))
-
-            print(f"\nComparison:")
-            print(f"PPO success rate: {ppo_success_rate:.2%}")
-            print(f"MCTS success rate: {mcts_success_rate:.2%}")
-            if ppo_success_rate > mcts_success_rate:
-                print(f"PPO was {ppo_success_rate / mcts_success_rate:.3f} times more successful than MCTS")
-            elif mcts_success_rate > ppo_success_rate:
-                print(f"MCTS was {mcts_success_rate / ppo_success_rate:.3f} times more successful than PPO")
-            else:
-                print("PPO and MCTS had the same success rate")
-            print(f"PPO avg distance: {ppo_avg_distance:.4f}")
-            print(f"MCTS avg distance: {mcts_avg_distance:.4f}")
-
-            if ppo_avg_distance < mcts_avg_distance:
-                print(f"PPO was {mcts_avg_distance / ppo_avg_distance:.3f} times closer than MCTS")
-            elif mcts_avg_distance < ppo_avg_distance:
-                print(f"MCTS was {ppo_avg_distance / mcts_avg_distance:.3f} times closer than PPO")
-            else:
-                print("PPO and MCTS had the same average distance")
 
 import cProfile
 cProfile.run('main()', 'output.prof')

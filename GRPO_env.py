@@ -4,20 +4,20 @@ import numpy as np
 import pandas as pd
 import torch
 import time
-from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
+from stable_baselines3.common.callbacks import BaseCallback
 
-class PPOEnv(gym.Env):
+class GRPOEnv(gym.Env):
     def __init__(self, dataset_path=None, numpy_dataset=None, model=None):
         """
-        Initialize the CERTIFAI environment for counterfactual generation.
+        Initialize the GRPO environment for counterfactual generation.
+        Similar to PPOEnv but designed for group-based advantage computation.
 
         Parameters:
         - dataset_path: Path to the CSV dataset (optional)
         - numpy_dataset: Dataset as numpy array (optional)
         - model: The classification model we're generating counterfactuals for
-        - distance_metric: Distance function to use (default: Euclidean distance)
         """
-        super(PPOEnv, self).__init__()
+        super(GRPOEnv, self).__init__()
 
         # Load dataset
         self.tab_dataset = None
@@ -45,6 +45,11 @@ class PPOEnv(gym.Env):
         self.sample_distance = None
         self.steps_taken = 0
 
+        # Group sampling state for GRPO
+        self.group_states = []
+        self.group_rewards = []
+        self.group_actions = []
+
         # Default constraints (which features can be modified)
         self.constraints = [1] * (len(self.tab_dataset.columns) - 1)  # Exclude target variable
 
@@ -55,16 +60,12 @@ class PPOEnv(gym.Env):
 
         # Define action space based on features that can be modified
         self.action_names = self.define_action_space()
-
-        # Convert the list of action names to a proper gym action space
         self.action_space = spaces.Discrete(len(self.action_names))
 
         # Define observation space
-        # Original features + modified features + metadata (steps, distance, etc.)
         feature_dim = len(self.tab_dataset.columns) - 1  # Exclude target variable
         obs_dim = feature_dim * 2 + 3  # Original + modified + metadata
 
-        # Set observation space bounds based on feature ranges
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
@@ -76,55 +77,50 @@ class PPOEnv(gym.Env):
         self.max_steps = 100
         self.done = False
 
-    def reset(self):
+    def reset(self, instance_idx=None):
         """
         Reset the environment for a new episode.
-
-        Returns:
-            observation: Initial state observation
+        
+        Parameters:
+            instance_idx: Specific instance index to use (for group sampling)
         """
-        # Select a random instance from the dataset
-        self.current_instance_idx = np.random.randint(0, len(self.tab_dataset))
+        # Select instance
+        if instance_idx is not None:
+            self.current_instance_idx = instance_idx
+        else:
+            self.current_instance_idx = np.random.randint(0, len(self.tab_dataset))
 
-        # Get the original features (excluding target variable) and create a copy for modification
+        # Get the original features and create a copy for modification
         self.original_features = self.tab_dataset.iloc[self.current_instance_idx].values[:-1]
         self.modified_features = self.original_features.copy()
 
         self.original_encoded = self.encode_features(self.original_features)
         self.modified_encoded = self.encode_features(self.modified_features)
 
-        # Get the original prediction and store it for later use
+        # Get the original prediction
         self.original_prediction = self.generate_prediction(self.model, self.original_features)
 
         # Reset tracking variables
         self.steps_taken = 0
         self.sample_distance = 0
-        
         self.done = False
 
-        # Create and return the initial observation
+        # Clear group data for new episode
+        self.group_states = []
+        self.group_rewards = []
+        self.group_actions = []
+
         return self._get_observation()
 
     def step(self, action):
-        """
-        Execute one step in the environment.
-
-        Parameters:
-            action: Index of the action to take
-
-        Returns:
-            observation: Next state observation
-            reward: Reward for the action
-            done: Whether the episode has ended
-            info: Additional information for debugging
-        """
-        # Increment step counter
+        """Execute one step in the environment."""
         self.steps_taken += 1
+        
         # Apply the selected action to modify features
         self.modified_features = self.apply_action(action)
         self.modified_encoded = self.encode_features(self.modified_features)
 
-        # Get the new prediction and store it for later use
+        # Get the new prediction
         modified_prediction = self.generate_prediction(self.model, self.modified_features)
 
         # Calculate distance between original and modified features
@@ -137,7 +133,7 @@ class PPOEnv(gym.Env):
         # Check if episode is done
         done = counterfactual_found or (self.steps_taken >= self.max_steps)
 
-        # Calculate reward using the stored modified_prediction
+        # Calculate reward
         reward = self.calculate_reward(distance, counterfactual_found, modified_prediction)
 
         # Get the next observation
@@ -150,64 +146,144 @@ class PPOEnv(gym.Env):
             'original_prediction': self.original_prediction,
             'modified_prediction': modified_prediction,
             'steps_taken': self.steps_taken,
-            'modified_features': self.modified_features
+            'modified_features': self.modified_features,
+            'reward': reward  # Store raw reward for group processing
         }
 
         self.done = done
         return observation, reward, done, info
 
+    def sample_group_trajectories(self, policy_fn, group_size=4, max_steps=None):
+        """
+        Sample a group of trajectories for the same initial state.
+        This is the core of GRPO - we need multiple outcomes to compare.
+        
+        Parameters:
+            policy_fn: Function that takes observation and returns action
+            group_size: Number of trajectories to sample
+            max_steps: Maximum steps per trajectory
+            
+        Returns:
+            List of trajectory dictionaries with rewards and actions
+        """
+        if max_steps is None:
+            max_steps = self.max_steps
+            
+        trajectories = []
+        initial_state = self.reset()  # Start from same initial state
+        initial_idx = self.current_instance_idx
+        
+        for _ in range(group_size):
+            # Reset to same initial state
+            self.reset(instance_idx=initial_idx)
+            
+            trajectory = {
+                'states': [],
+                'actions': [],
+                'rewards': [],
+                'log_probs': [],
+                'done': False,
+                'total_reward': 0,
+                'counterfactual_found': False
+            }
+            
+            obs = self._get_observation()
+            steps = 0
+            
+            while not self.done and steps < max_steps:
+                # Get action and log probability from policy
+                if hasattr(policy_fn, 'predict_with_log_prob'):
+                    action, log_prob = policy_fn.predict_with_log_prob(obs)
+                elif hasattr(policy_fn, 'predict'):
+                    action, _ = policy_fn.predict(obs, deterministic=False)
+                    log_prob = 0  # Will need to compute this separately
+                else:
+                    try:
+                        # Try to get both action and log_prob
+                        action, log_prob = policy_fn(obs)
+                    except Exception as e:
+                        # If it doesn't return log_prob or any other error
+                        action = policy_fn(obs)
+                        log_prob = 0
+            
+                trajectory['states'].append(obs.copy())
+                trajectory['actions'].append(action)
+                trajectory['log_probs'].append(log_prob)
+                
+                obs, reward, done, info = self.step(action)
+                
+                trajectory['rewards'].append(reward)
+                trajectory['total_reward'] += reward
+                
+                if info['counterfactual_found']:
+                    trajectory['counterfactual_found'] = True
+                    trajectory['distance'] = info['distance']
+                    trajectory['steps_to_success'] = steps + 1
+                
+                steps += 1
+            
+            trajectory['done'] = self.done
+            trajectory['final_info'] = info if 'info' in locals() else {}
+            trajectories.append(trajectory)
+        
+        return trajectories
+
+    def compute_group_advantages(self, trajectories):
+        """
+        Compute advantages based on group comparison (core of GRPO).
+        
+        Parameters:
+            trajectories: List of trajectory dictionaries
+            
+        Returns:
+            List of advantages for each trajectory
+        """
+        # Extract total rewards from trajectories
+        total_rewards = [traj['total_reward'] for traj in trajectories]
+        
+        if len(total_rewards) == 0:
+            return []
+        
+        # Compute group statistics
+        mean_reward = np.mean(total_rewards)
+        std_reward = np.std(total_rewards) if len(total_rewards) > 1 else 1.0
+        
+        # Avoid division by zero
+        if std_reward < 1e-8:
+            std_reward = 1.0
+        
+        # Compute advantages: (reward - mean) / std
+        advantages = [(reward - mean_reward) / std_reward for reward in total_rewards]
+        
+        return advantages
+
     def _get_observation(self):
         """Create observation vector from current state."""
-        # Add metadata to the observation: steps taken, distance, normalized progress
         steps_normalized = self.steps_taken / self.max_steps
 
-        # Combine all into observation vector
         observation = np.concatenate([
             self.original_encoded,
             self.modified_encoded,
             [steps_normalized, self.sample_distance, float(self.original_prediction)]
         ]).astype(np.float32)
 
-        # Replace any NaN values with 0
         observation = np.nan_to_num(observation, nan=0.0)
-
         return observation
 
-    def calculate_distance(self):
-        """Calculate the distance between original and modified features."""
-        # Calculate distance using the specified distance metric
-        try:
-            eucl_distance = lambda x, y: np.linalg.norm(x - y, ord=2)
-            distance = eucl_distance(self.original_encoded, self.modified_encoded)
-            return distance
-        except Exception as e:
-            return float('inf')
-
     def calculate_normalized_distance(self):
-        """
-        Calculate normalized distance between original and modified features.
-        Uses the sum of ratios (min of x/y or y/x) for each feature dimension.
-        """
-        # Initialize distance
+        """Calculate normalized distance between original and modified features."""
         normalized_distance = 1.0
-        # print("-"*20)
-        # print("Calculating distance")
-        # Calculate ratio for each feature
+        
         for orig, mod in zip(self.original_encoded, self.modified_encoded):
-            # print(f"orig : {orig}, mod : {mod}")
-            # Ensure values are positive and non-zero
             if orig == mod:
                 continue
             orig = abs(orig)
             mod = abs(mod)
             if orig == 0 or mod == 0:
-                ratio = orig + mod  # Avoid division by zero
+                ratio = orig + mod
             else:
-                # Calculate ratio and its inverse
-                ratio = orig / mod  if orig > mod else mod / orig
+                ratio = orig / mod if orig > mod else mod / orig
                 normalized_distance *= ratio
-                # print(f"original sample: {self.original_encoded}, modified sample: {self.modified_encoded}")
-                # print(f"Original: {orig}, Modified: {mod}, Ratio: {ratio}, Normalized Distance: {normalized_distance}")
 
         return normalized_distance
 
@@ -226,7 +302,6 @@ class PPOEnv(gym.Env):
             total_reward = base_reward + distance_reward + step_bonus
             return total_reward
         else:
-            # Less harsh penalty for exploration
             exploration_penalty = -1.0  # Instead of -10
             
             # Small reward for getting closer to decision boundary
@@ -236,62 +311,40 @@ class PPOEnv(gym.Env):
             return exploration_penalty + progress_reward
 
     def apply_action(self, action_idx):
-        """
-        Apply the selected action to modify features, with stage-specific behaviors.
-
-        Parameters:
-            action_idx: Index of the action to take
-        Returns:
-            modified_features: The features after applying the action
-        """
-        # Get the action name from the action space
+        """Apply the selected action to modify features."""
         action_name = self._action_idx_to_name(action_idx)
-
-        # Create a copy of the current features to modify
         modified_features = self.modified_features.copy()
 
         try:
-            # Extract feature name from action name
             if '_' in action_name:
-                action_type = action_name.split('_')[0]  # 'change', 'increase', or 'decrease'
+                action_type = action_name.split('_')[0]
                 feature_name = '_'.join(action_name.split('_')[1:])
                 feature_index = list(self.tab_dataset.columns[:-1]).index(feature_name)
 
                 # Handle categorical features
                 if action_type == 'change':
                     for idx, ncat, cat_values in self.cats_ids:
-                        # Skip if not applicable
                         if idx != feature_index or ncat <= 1:
                             continue
 
-                        # Get current category index (assuming encoded)
                         current_value = modified_features[feature_index]
-
-                        # For categorical features, systematically try different categories
                         all_indices = list(range(ncat))
                         if current_value in all_indices:
                             all_indices.remove(int(current_value))
 
-                        # Select next category in a deterministic way
                         if all_indices:
-                            # Choose next category based on step count for more systematic exploration
                             next_index = all_indices[self.steps_taken % len(all_indices)]
                             modified_features[feature_index] = next_index
 
-                # Handle continuous features with adaptive step sizes
+                # Handle continuous features
                 elif action_type in ['increase', 'decrease']:
                     current_value = modified_features[feature_index]
-
-                    # Adaptive step size based on progress through episode and training stage
                     progress = self.steps_taken / self.max_steps
 
-                    base_step = 0.20  # 20% change for broader exploration
-                    fine_step = 0.10  # 10% change
-
-                    # Adaptive step size: larger at beginning, finer as we progress
+                    base_step = 0.20
+                    fine_step = 0.10
                     step_size = base_step * (1 - progress) + fine_step * progress
 
-                    # Apply the step
                     if action_type == 'increase':
                         max_value = self.tab_dataset.iloc[:, feature_index].max()
                         mean_value = self.tab_dataset.iloc[:, feature_index].mean()
@@ -299,11 +352,10 @@ class PPOEnv(gym.Env):
                         if calculated_value == current_value:
                             calculated_value = mean_value * step_size
 
-                        # Round if the feature is integer type
                         if self.tab_dataset.iloc[:, feature_index].dtype in [np.int64, np.int32, int]:
                             calculated_value = int(calculated_value)
                             if calculated_value == current_value:
-                                calculated_value += 1  # Ensure we change the value
+                                calculated_value += 1
 
                         new_value = min(calculated_value, max_value)
                         modified_features[feature_index] = new_value
@@ -314,7 +366,6 @@ class PPOEnv(gym.Env):
                         if calculated_value == current_value:
                             calculated_value = mean_value * step_size
 
-                        # Round if the feature is integer type
                         if self.tab_dataset.iloc[:, feature_index].dtype in [np.int64, np.int32, int]:
                             calculated_value = int(calculated_value)
                             if calculated_value == current_value:
@@ -324,7 +375,6 @@ class PPOEnv(gym.Env):
                         modified_features[feature_index] = new_value
         except Exception as e:
             print(f"Error applying action {action_name}: {e}")
-            # Return the unmodified features if there's an error
 
         return modified_features
 
@@ -335,39 +385,31 @@ class PPOEnv(gym.Env):
     def encode_features(self, features):
         """Encode features for the model input."""
         features_df = pd.DataFrame([features], columns=self.tab_dataset.columns[:-1])
-
-        # Create a copy to avoid modifying the original
         encoded_features = features_df.copy()
 
         for idx, n_cats, cat_values in self.cats_ids:
-            if idx < len(encoded_features.columns):  # Ensure we don't go out of bounds
+            if idx < len(encoded_features.columns):
                 for i, cat_value in enumerate(cat_values):
-                    # Replace categorical values with their index
                     encoded_features.iloc[:, idx] = np.where(
                         encoded_features.iloc[:, idx] == cat_value, i, encoded_features.iloc[:, idx]
                     )
 
-        # Convert to numeric, handle NaNs
         encoded = encoded_features.astype(float).values.flatten()
         encoded = np.nan_to_num(encoded, nan=0.0)
-
         return encoded
 
     def define_action_space(self, constraints=None):
-        # Define the action space based on the features
+        """Define the action space based on the features."""
         action_space = []
         if constraints is None:
-            constraints = self.constraints  # Use default constraints if not provided
-        if constraints is None:
-            constraints = [1] * len(self.tab_dataset.columns)  # Default to no constraints
+            constraints = self.constraints
 
-        for i, column in enumerate(self.tab_dataset.columns[:-1]):  # Exclude the target variable
-            # if the feature is constrained, skip it : fixed features aren't present in the action space
+        for i, column in enumerate(self.tab_dataset.columns[:-1]):
             if constraints[i] == 0:
-                    continue
-            if self.tab_dataset[column].dtype == 'O':  # Categorical feature
+                continue
+            if self.tab_dataset[column].dtype == 'O':
                 action_space.append(f'change_{column}')
-            else:  # Continuous feature
+            else:
                 action_space.append(f'increase_{column}')
                 action_space.append(f'decrease_{column}')
         return action_space
@@ -375,21 +417,18 @@ class PPOEnv(gym.Env):
     def generate_prediction(self, model, features):
         """Generate a prediction using the provided model."""
         try:
-            # Ensure features are numerical
             features = self.encode_features(features)
-            # Handle NaN values
             features = np.nan_to_num(features, nan=0.0)
             features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0)
             with torch.no_grad():
                 prediction = model(features_tensor).argmax(dim=-1).item()
             return prediction
         except Exception as e:
-            return 0  # Return a default prediction in case of error
+            return 0
 
     def get_con_cat_columns(self, x):
         """Identify continuous and categorical columns in the dataset."""
-        assert isinstance(x, pd.DataFrame), 'This method can be used only if input\
-            is an instance of pandas dataframe at the moment.'
+        assert isinstance(x, pd.DataFrame), 'Input must be a pandas DataFrame'
 
         con = []
         cat = []
@@ -402,28 +441,25 @@ class PPOEnv(gym.Env):
 
         return con, cat
 
-    def generate_cats_ids(self, dataset = None, cat = None):
+    def generate_cats_ids(self, dataset=None, cat=None):
         """Generate categorical IDs for encoding."""
         if dataset is None:
-            assert self.tab_dataset is not None, 'If the dataset is not provided\
-            to the function, a csv needs to have been provided when instatiating the class'
             dataset = self.tab_dataset
         if cat is None:
             con, cat = self.get_con_cat_columns(dataset)
+        
         cat_ids = []
         for index, key in enumerate(dataset):
             if key in set(cat):
-                cat_ids.append((index,
-                                len(pd.unique(dataset[key])),
-                                pd.unique(dataset[key])))
+                cat_ids.append((index, len(pd.unique(dataset[key])), pd.unique(dataset[key])))
         return cat_ids
 
-class CERTIFAIMonitorCallback(BaseCallback):
-    """
-    Custom callback for monitoring CERTIFAI training progress.
-    """
+
+class GRPOMonitorCallback(BaseCallback):
+    """Custom callback for monitoring GRPO training progress."""
+    
     def __init__(self, eval_env=None, eval_freq=1000, n_eval_episodes=5, verbose=1):
-        super(CERTIFAIMonitorCallback, self).__init__(verbose)
+        super(GRPOMonitorCallback, self).__init__(verbose)
         self.eval_env = eval_env
         self.eval_freq = eval_freq
         self.n_eval_episodes = n_eval_episodes
@@ -435,7 +471,6 @@ class CERTIFAIMonitorCallback(BaseCallback):
 
     def _on_step(self):
         if self.n_calls % self.eval_freq == 0:
-            # Log time since last evaluation
             current_time = time.time()
             fps = self.eval_freq / (current_time - self.last_eval_time)
             self.last_eval_time = current_time
@@ -470,4 +505,3 @@ class CERTIFAIMonitorCallback(BaseCallback):
             print(f"Evaluation over {self.n_eval_episodes} episodes:")
             print(f"Success rate: {counterfactuals_found/self.n_eval_episodes:.2%}")
             print(f"Overall success rate: {self.success_rate:.2%}")
-

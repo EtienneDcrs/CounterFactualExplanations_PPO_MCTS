@@ -169,4 +169,3 @@ if __name__ == "__main__":
     print(proximity_KPI(x, y, con, cat))
     print(sparsity_KPI(x, y))
 
-

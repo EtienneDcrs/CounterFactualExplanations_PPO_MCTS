@@ -1,0 +1,69 @@
+Algorithm 1 Iterative Group Relative Policy Optimization
+Input initial policy model 𝜋𝜃init ; reward models 𝑟𝜑; task prompts D; hyperparameters 𝜀, 𝛽, 𝜇
+1: policy model 𝜋𝜃 ← 𝜋𝜃init
+2: for iteration = 1, . . . , I do
+3: reference model 𝜋𝑟𝑒 𝑓 ← 𝜋𝜃
+4: for step = 1, . . . , M do
+5: Sample a batch D𝑏 from D
+6: Update the old policy model 𝜋𝜃𝑜𝑙𝑑 ← 𝜋𝜃
+7: Sample 𝐺 outputs {𝑜𝑖}𝐺𝑖=1 ∼ 𝜋𝜃𝑜𝑙𝑑 (· | 𝑞) for each question 𝑞 ∈ D𝑏
+8: Compute rewards {𝑟𝑖}𝐺𝑖=1 for each sampled output 𝑜𝑖 by running 𝑟𝜑
+9: Compute ˆ𝐴𝑖,𝑡 for the 𝑡-th token of 𝑜𝑖 through group relative advantage estimation.
+10: for GRPO iteration = 1, . . . , 𝜇 do
+11: Update the policy model 𝜋𝜃 by maximizing the GRPO objective (Equation 21)
+12: Update 𝑟𝜑 through continuous training using a replay mechanism.
+Output 𝜋𝜃
+
+
+
+
+
+Starting GRPO training following Deepseek GRPO Algorithm...
+
+=== Iteration 1/10 ===
+  Step 1/10: Loss=-0.0000, Success=100.00%, μ_iters=4
+  Step 10/10: Loss=0.0000, Success=80.00%, μ_iters=4
+Iteration 1 Summary:
+  Average Loss: -0.0001
+  Average Success Rate: 70.00%
+  Average Reward: -205.83
+
+=== Iteration 2/10 ===
+  Step 1/10: Loss=-0.0000, Success=60.00%, μ_iters=4
+  Step 10/10: Loss=0.0094, Success=80.00%, μ_iters=4
+Iteration 2 Summary:
+  Average Loss: -0.0000
+  Average Success Rate: 56.00%
+  Average Reward: -366.53
+
+=== Iteration 3/10 ===
+  Step 1/10: Loss=0.0114, Success=80.00%, μ_iters=4
+  Step 10/10: Loss=0.0000, Success=60.00%, μ_iters=4
+Iteration 3 Summary:
+  Average Loss: 0.0014
+  Average Success Rate: 72.00%
+  Average Reward: -182.90
+
+=== Iteration 8/10 ===
+  Step 1/10: Loss=-0.0015, Success=60.00%, μ_iters=4
+  Step 10/10: Loss=0.0000, Success=40.00%, μ_iters=4
+Iteration 8 Summary:
+  Average Loss: 0.0049
+  Average Success Rate: 54.00%
+  Average Reward: -390.43
+
+=== Iteration 9/10 ===
+  Step 1/10: Loss=0.0076, Success=60.00%, μ_iters=4
+  Step 10/10: Loss=0.0000, Success=80.00%, μ_iters=4
+Iteration 9 Summary:
+  Average Loss: 0.0046
+  Average Success Rate: 63.50%
+  Average Reward: -271.55
+
+=== Iteration 10/10 ===
+  Step 1/10: Loss=-0.0002, Success=60.00%, μ_iters=4
+  Step 10/10: Loss=-0.0002, Success=100.00%, μ_iters=4
+Iteration 10 Summary:
+  Average Loss: 0.0019
+  Average Success Rate: 69.00%
+  Average Reward: -214.97

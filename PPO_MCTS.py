@@ -94,11 +94,6 @@ class PPOMCTS:
         - state: State representation from MCTS node
         """
         # Extract features from state representation
-        # The state likely includes both original and modified features,
-        # plus possibly some metadata
-        
-        # This implementation depends on your specific environment structure
-        # Assuming state directly maps to the observation structure:
         env.modified_features = state[:len(env.original_features)]
  
         # Ensure the prediction is updated
@@ -156,9 +151,6 @@ class PPOMCTS:
             # Get the probabilities
             action_probs = torch.exp(action_distribution.log_prob(torch.arange(action_distribution.action_dim))).numpy()
 
-
-            #print("action_probabilities", action_probs)
-
         # Convert action_probs to numpy array
         if isinstance(action_probs, torch.Tensor):
             action_probs = action_probs.numpy()
@@ -195,11 +187,6 @@ class PPOMCTS:
         
         # Set the environment state to match the leaf node's state
         self._set_env_state(virtual_env, leaf_node.state)
-        
-        # Get policy prediction for this state
-        #action_probs, _states = self.ppo_model.predict(leaf_node.state, deterministic=False)
-
-
 
         with torch.no_grad():
 
@@ -449,20 +436,3 @@ class PPOMCTS:
         action, _ = self.ppo_model.predict(root_state, deterministic=(temperature == 0))
         #self.draw_tree()
         return action
-    
-
-    def draw_tree(self):
-        """
-        Draw the MCTS tree using graphviz.
-        """
-
-        dot = graphviz.Digraph()
-        dot.node('root', 'Root Node')
-        for action, child in self.root.children.items():
-            dot.node(str(action), str(action))
-            dot.edge('root', str(action))
-            self._draw_tree_recursive(dot, child)
-        dot.render('mcts_tree', format='png', cleanup=True)
-        dot.view()
-        
-        return
