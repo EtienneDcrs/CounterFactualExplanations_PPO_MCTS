@@ -6,6 +6,30 @@ import torch
 import time
 from stable_baselines3.common.callbacks import BaseCallback
 
+
+"""
+The following code implements the GRPO algorithm for training a policy to generate counterfactuals.
+This is based on the Deepseek GRPO algorithm, as described in their paper.
+
+Algorithm 1 Iterative Group Relative Policy Optimization
+Input initial policy model 𝜋𝜃init ; reward models 𝑟𝜑; task prompts D; hyperparameters 𝜀, 𝛽, 𝜇
+1: policy model 𝜋𝜃 ← 𝜋𝜃init
+2: for iteration = 1, . . . , I do
+3: reference model 𝜋𝑟𝑒 𝑓 ← 𝜋𝜃
+4: for step = 1, . . . , M do
+5: Sample a batch D𝑏 from D
+6: Update the old policy model 𝜋𝜃𝑜𝑙𝑑 ← 𝜋𝜃
+7: Sample 𝐺 outputs {𝑜𝑖}𝐺𝑖=1 ∼ 𝜋𝜃𝑜𝑙𝑑 (· | 𝑞) for each question 𝑞 ∈ D𝑏
+8: Compute rewards {𝑟𝑖}𝐺𝑖=1 for each sampled output 𝑜𝑖 by running 𝑟𝜑
+9: Compute ˆ𝐴𝑖,𝑡 for the 𝑡-th token of 𝑜𝑖 through group relative advantage estimation.
+10: for GRPO iteration = 1, . . . , 𝜇 do
+11: Update the policy model 𝜋𝜃 by maximizing the GRPO objective (Equation 21)
+12: Update 𝑟𝜑 through continuous training using a replay mechanism.
+Output 𝜋𝜃
+
+"""
+
+
 class GRPOEnv(gym.Env):
     def __init__(self, dataset_path=None, numpy_dataset=None, model=None):
         """
@@ -294,7 +318,7 @@ class GRPOEnv(gym.Env):
             base_reward = 100.0
             
             # Distance bonus - reward closer counterfactuals more
-            distance_reward = max(10.0, 50.0 / max(distance, 1))
+            distance_reward = 100.0 / distance
             
             # Step efficiency bonus - reward finding it faster
             step_bonus = max(0, 20 * (1 - self.steps_taken / self.max_steps))
@@ -302,13 +326,9 @@ class GRPOEnv(gym.Env):
             total_reward = base_reward + distance_reward + step_bonus
             return total_reward
         else:
-            exploration_penalty = -1.0  # Instead of -10
+            exploration_penalty = -1.0 
             
-            # Small reward for getting closer to decision boundary
-            # This requires tracking prediction confidence, but helps with sparse rewards
-            progress_reward = 0.0
-            
-            return exploration_penalty + progress_reward
+            return exploration_penalty
 
     def apply_action(self, action_idx):
         """Apply the selected action to modify features."""

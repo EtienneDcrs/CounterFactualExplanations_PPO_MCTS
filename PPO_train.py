@@ -8,7 +8,7 @@ from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 from tqdm import tqdm
 
-from PPO_env import PPOEnv, CERTIFAIMonitorCallback
+from PPO_env import PPOEnv, PPOMonitorCallback
 from Classifier_model import Classifier, train_model
 from PPO_MCTS import PPOMCTS
 from KPIs import proximity_KPI, sparsity_KPI
@@ -82,7 +82,7 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
     classifier.eval()  # Set to evaluation mode
 
     
-    # Create the CERTIFAI environment
+    # Create the PPO environment
     env = PPOEnv(dataset_path=dataset_path, model=classifier)
     eval_env = PPOEnv(dataset_path=dataset_path, model=classifier)
     
@@ -98,7 +98,7 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
                 ppo_model_path, 
                 env=env,
                 tensorboard_log=logs_dir,
-                custom_objects={"learning_rate": 3e-4} 
+                custom_objects={"learning_rate": 3e-4}  # Ensure consistent learning rate
             )
             print("Existing PPO model loaded successfully. Continuing training...")
             
@@ -113,10 +113,25 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
     # Create a new model if needed
     if not model_exists or not continue_training:
         print("Creating a new PPO agent...")
-        model = PPO(policy="MlpPolicy",env=env,learning_rate=3e-4,n_steps=2048,batch_size=64,
-            n_epochs=10,gamma=0.99,gae_lambda=0.95,clip_range=0.2,clip_range_vf=None,ent_coef=0.01,
-            vf_coef=0.5,max_grad_norm=0.5,use_sde=False,sde_sample_freq=-1,target_kl=None,
-            tensorboard_log=logs_dir,verbose=1
+        model = PPO(
+            policy="MlpPolicy",
+            env=env,
+            learning_rate=3e-4,
+            n_steps=2048,
+            batch_size=64,
+            n_epochs=10,
+            gamma=0.99,
+            gae_lambda=0.95,
+            clip_range=0.2,
+            clip_range_vf=None,
+            ent_coef=0.01,
+            vf_coef=0.5,
+            max_grad_norm=0.5,
+            use_sde=False,
+            sde_sample_freq=-1,
+            target_kl=None,
+            tensorboard_log=logs_dir,
+            verbose=1
         )
     
     # Create the callbacks
@@ -126,7 +141,7 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
         name_prefix=f"ppo_certifai_{os.path.basename(dataset_path)}_checkpoint"
     )
     
-    monitor_callback = CERTIFAIMonitorCallback(
+    monitor_callback = PPOMonitorCallback(
         eval_env=eval_env,
         eval_freq=5000,
         n_eval_episodes=10,
@@ -158,9 +173,10 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
     return model, env
 
 def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None, 
-                            specific_indices=None, max_steps_per_sample=100, use_mcts=False, mcts_simulations=10):
+                            specific_indices=None, max_steps_per_sample=100,
+                            batch_size=None, use_mcts=False, mcts_simulations=10):
     """
-    Generate counterfactuals using a trained PPO model for samples in the dataset.
+    Generate counterfactuals using a trained PPO model for all samples in the dataset.
     
     Parameters:
     -----------
@@ -177,6 +193,9 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
         If None, all samples in the dataset will be used
     max_steps_per_sample : int
         Maximum steps to attempt for each counterfactual
+    batch_size : int, optional
+        Number of samples to process before saving intermediate results.
+        If None, all results will be saved only at the end.
     use_mcts : bool
         Whether to use MCTS for action selection
     mcts_simulations : int
@@ -279,13 +298,19 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
                     'distance': info['distance'],
                     'steps': steps
                 })
-                print(f"original_data : {original_features}, modified_data : {info['modified_features']}, distance : {info['distance']}, steps : {steps}")
+                
                 # Add to dataframes for KPI calculation
                 original_samples.append(original_features)
                 counterfactual_samples.append(info['modified_features'])
                 
                 break
-
+              
+        # Save intermediate results if batch_size is specified
+        if batch_size and (i + 1) % batch_size == 0:
+            intermediate_save_path = f"{os.path.splitext(save_path)[0]}_batch_{(i+1)//batch_size}.csv"
+            _save_counterfactuals(counterfactuals, original_data, intermediate_save_path)
+            print(f"Saved intermediate results to {intermediate_save_path}")
+    
     # Create dataframes for KPI calculation
     original_df = pd.DataFrame(original_samples, columns=feature_columns)
     counterfactual_df = pd.DataFrame(counterfactual_samples, columns=feature_columns)
@@ -337,6 +362,7 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
         kpi_base_path = os.path.splitext(save_path)[0]
         original_df.to_csv(f"{kpi_base_path}_original.csv", index=False)
         counterfactual_df.to_csv(f"{kpi_base_path}_counterfactual.csv", index=False)
+        #print(f"KPI-compatible dataframes saved to {kpi_base_path}_original.csv and {kpi_base_path}_counterfactual.csv")
     
     return counterfactuals, original_df, counterfactual_df 
 
@@ -365,108 +391,35 @@ def _save_counterfactuals(counterfactuals, original_data, save_path):
     # Save to CSV
     df = pd.DataFrame(counterfactual_data)
     df.to_csv(save_path, index=False)
-    
-    # Create a summary file with feature change frequencies
-    if len(counterfactual_data) > 0:
-        summary_path = os.path.splitext(save_path)[0] + "_summary.csv"
-        
-        # Calculate which features changed most often
-        feature_changes = {}
-        for i, col in enumerate(original_data.columns[:-1]):
-            changes = 0
-            total_abs_change = 0
-            
-            for cf in counterfactuals:
-                orig = cf['original_features'][i]
-                new = cf['counterfactual_features'][i]
-                
-                if abs(orig - new) > 1e-6:  # Consider it changed if difference is significant
-                    changes += 1
-                    total_abs_change += abs(orig - new)
-            
-            feature_changes[col] = {
-                'change_count': changes,
-                'change_percentage': changes / len(counterfactuals) * 100 if counterfactuals else 0,
-                'avg_magnitude': total_abs_change / changes if changes > 0 else 0
-            }
-        
-        # Create summary DataFrame
-        summary_df = pd.DataFrame.from_dict(feature_changes, orient='index')
-        summary_df.to_csv(summary_path)    
+    #print(f"Counterfactuals saved to {save_path}")
+  
     return counterfactuals
 
-TOTAL_TIMESTEPS = 3000  # Total timesteps for training
+TOTAL_TIMESTEPS = 500000  # Total timesteps for training
 
 def main():
-    dataset_path = 'data/adult.csv'
+    # Specify the dataset path
+    #dataset_path = 'data/drug200.csv'
     dataset_path = 'data/diabetes.csv'
-    dataset_path = 'data/drug200.csv'
-    model_path = None  # Path to the ppo model, if any
+    
+    # Create logs and model directories
     logs_dir = 'ppo_logs'
     save_dir = 'ppo_models'
     os.makedirs('data', exist_ok=True)
-
+    
     # Define whether to continue training an existing model
     continue_training = True
-    new_model = False  # Set to True if you want to train a new model regardless of existing ones
     
-    out = None
-    if dataset_path.endswith('.csv'):
-        # Load the dataset to determine the number of classes
-        dataset = pd.read_csv(dataset_path)
-        out = len(dataset.iloc[:, -1].unique())
-    else:
-        # Default case - try to determine from the dataset
-        dataset = pd.read_csv(dataset_path)
-        out = len(dataset.iloc[:, -1].unique())
-    in_feats = len(dataset.columns) - 1  # Exclude target variable
-    
-    # Load or train the classifier model
-    if model_path is None:
-        model_path = f"{os.path.splitext(os.path.basename(dataset_path))[0]}_model.pt"
-        model_path = os.path.join("classification_models", model_path)
-    # Check if the classifier model exists, otherwise exit
 
-    if not os.path.exists(model_path):
-        print(f"Classifier model not found at {model_path}. Training a new one.")
-        train_model(dataset_path, model_path)
-
-    print(f"Loading classifier model from {model_path}")
-    # Load dataset to determine input features
-    dataset = pd.read_csv(dataset_path)
-    
-    # Load the classifier model
-    classifier = Classifier(in_feats=in_feats, out=out)
-    classifier.load_state_dict(torch.load(model_path))
-    classifier.eval()  # Set to evaluation mode
-    ppo_model_path = os.path.join(save_dir, f"ppo_certifai_final_{os.path.basename(dataset_path)}.zip")
-    env = PPOEnv(dataset_path=dataset_path, model=classifier)
-
-    # Check if a PPO model already exists and load it if continue_training is True
-    model_exists = os.path.exists(ppo_model_path)
-    if model_exists and not continue_training and not new_model:
-        print(f"Loading existing PPO model from {ppo_model_path}")
-        try:
-            ppo_model = PPO.load(
-                ppo_model_path, 
-                env=env,
-                tensorboard_log=logs_dir,
-                custom_objects={"learning_rate": 3e-4} 
-            )
-        except Exception as e:
-            print(f"Error loading existing model: {e}")
-            print("Creating a new PPO model instead...")
-            model_exists = False
-    else:
-        # Train the PPO model (will load and continue if it exists)
-        print("Training new PPO model...")
-        ppo_model, env = train_ppo_for_counterfactuals(
-            dataset_path=dataset_path,
-            logs_dir=logs_dir,
-            save_dir=save_dir,
-            total_timesteps=TOTAL_TIMESTEPS, 
-            continue_training=continue_training
-        )
+    # Train the PPO model (will load and continue if it exists)
+    print("Training new PPO model...")
+    ppo_model, env = train_ppo_for_counterfactuals(
+        dataset_path=dataset_path,
+        logs_dir=logs_dir,
+        save_dir=save_dir,
+        total_timesteps=TOTAL_TIMESTEPS, 
+        continue_training=continue_training
+    )
     
     if ppo_model is not None:
                 
@@ -485,6 +438,7 @@ def main():
             specific_indices=indices_to_use
         )
 
+
         # Generate counterfactuals - with MCTS
         print("Generating counterfactuals using MCTS...")
         counterfactuals_mcts, _, _ = generate_counterfactuals(
@@ -494,9 +448,9 @@ def main():
             save_path=f'data/generated_counterfactuals_mcts_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv',
             max_steps_per_sample=100,
             use_mcts=True,
-            mcts_simulations=20,  # Adjust simulations as needed
+            mcts_simulations=15,  # Adjust simulations as needed
             specific_indices=indices_to_use
         )
 
-import cProfile
-cProfile.run('main()', 'output.prof')
+if __name__ == "__main__":
+    main()

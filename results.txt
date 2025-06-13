@@ -1,0 +1,15 @@
+Final statistics:
+Success rate: 99.00% (99/100)
+Mean distance of counterfactuals: 0.50
+Average steps per successful counterfactual: 3.81
+Total time: 0.79 seconds
+Proximity KPI: 0.2982
+Sparsity KPI: 1.6667
+
+MCTS Final statistics:
+Success rate: 100.00% (100/100)
+Mean distance of counterfactuals: 0.47
+Average steps per successful counterfactual: 3.91
+Total time: 189.54 seconds
+Proximity KPI: 0.2794
+Sparsity KPI: 1.67

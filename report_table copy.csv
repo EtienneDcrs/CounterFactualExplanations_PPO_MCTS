@@ -1,4 +1,8 @@
 Model,Coverage,Proximity,Sparsity,Time
 CERTIFAI,100,0.77,7.81,33
-PPO SB3,77,0.32,1.45,11.2
+PPO,77,0.32,1.45,11.2
+PPO (2),90,0.33,1.72,1.45
+MCTS,95,0.33,1.78,720
+PPO (500k steps),97,0.30,1.65,0.89
+MCTS (500k steps),98,0.27,1.59,218
 GRPO,74,0.43,1.24,4.74

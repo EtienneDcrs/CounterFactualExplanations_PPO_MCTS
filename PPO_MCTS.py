@@ -38,7 +38,7 @@ class MCTSNode:
 
 class PPOMCTS:
     """
-    Monte Carlo Tree Search implementation for CERTIFAI counterfactual generation.
+    Monte Carlo Tree Search implementation for PPO counterfactual generation.
     """
     def __init__(self, env, ppo_model, c_puct=1.0, discount_factor=0.99, num_simulations=10):
         """
@@ -278,7 +278,6 @@ class PPOMCTS:
             reward = virtual_env.calculate_reward(
                 distance=distance,
                 counterfactual_found=counterfactual_found,
-                modified_prediction=modified_prediction
             )
             value = reward
         else:

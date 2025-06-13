@@ -15,6 +15,28 @@ from Classifier_model import Classifier, train_model
 from KPIs import proximity_KPI, sparsity_KPI
 
 
+"""
+The following code implements the GRPO algorithm for training a policy to generate counterfactuals.
+This is based on the Deepseek GRPO algorithm, as described in their paper.
+
+Algorithm 1 Iterative Group Relative Policy Optimization
+Input initial policy model 𝜋𝜃init ; reward models 𝑟𝜑; task prompts D; hyperparameters 𝜀, 𝛽, 𝜇
+1: policy model 𝜋𝜃 ← 𝜋𝜃init
+2: for iteration = 1, . . . , I do
+3: reference model 𝜋𝑟𝑒 𝑓 ← 𝜋𝜃
+4: for step = 1, . . . , M do
+5: Sample a batch D𝑏 from D
+6: Update the old policy model 𝜋𝜃𝑜𝑙𝑑 ← 𝜋𝜃
+7: Sample 𝐺 outputs {𝑜𝑖}𝐺𝑖=1 ∼ 𝜋𝜃𝑜𝑙𝑑 (· | 𝑞) for each question 𝑞 ∈ D𝑏
+8: Compute rewards {𝑟𝑖}𝐺𝑖=1 for each sampled output 𝑜𝑖 by running 𝑟𝜑
+9: Compute ˆ𝐴𝑖,𝑡 for the 𝑡-th token of 𝑜𝑖 through group relative advantage estimation.
+10: for GRPO iteration = 1, . . . , 𝜇 do
+11: Update the policy model 𝜋𝜃 by maximizing the GRPO objective (Equation 21)
+12: Update 𝑟𝜑 through continuous training using a replay mechanism.
+Output 𝜋𝜃
+
+"""
+
 class GRPOPolicy(nn.Module):
     """
     Simple policy network for GRPO - no critic needed!
@@ -133,7 +155,7 @@ class GRPOTrainer:
         total_policy_loss = 0
         total_kl_div = 0
         
-        for grpo_iter in range(self.mu_iterations):
+        for _ in range(self.mu_iterations):
             policy_loss, kl_div = self._compute_grpo_loss(all_trajectories, advantages)
             
             # Optimize policy
@@ -174,7 +196,7 @@ class GRPOTrainer:
         """
         trajectories = []
         # Reset to same initial state for group comparison
-        initial_state = self.env.reset()
+        self.env.reset()
         initial_idx = self.env.current_instance_idx
         
         for _ in range(group_size):
@@ -287,7 +309,7 @@ def train_grpo_for_counterfactuals(dataset_path, model_path=None, logs_dir='grpo
                                    steps_per_iteration=10, mu_iterations=4,
                                    continue_training=True):
     """
-    Train GRPO following Deepseek GRPO Algorithm structure more closely
+    Train GRPO following Deepseek GRPO Algorithm structure
     
     Parameters:
     -----------
@@ -364,7 +386,6 @@ def train_grpo_for_counterfactuals(dataset_path, model_path=None, logs_dir='grpo
     
     # Deepseek GRPO Algorithm: Main training loop
     print(f"Starting GRPO training following Deepseek GRPO Algorithm...")
-    start_time = time.time()
     
     for iteration in range(total_iterations):  # Algorithm line 2
         # Step 3: Update reference model
@@ -591,15 +612,6 @@ def main():
     """Main function to run GRPO training and counterfactual generation"""
     dataset_path = 'data/adult.csv'
     dataset_path = 'data/diabetes.csv'
-    
-    model_path = None  # Will be auto-determined
-    logs_dir = 'grpo_logs'
-    save_dir = 'grpo_models'
-    os.makedirs('data', exist_ok=True)
-    
-    # Training settings
-    total_training_steps = 100  # Adjust as needed
-    continue_training = True
     
     print("=== GRPO Counterfactual Generation ===")
     
