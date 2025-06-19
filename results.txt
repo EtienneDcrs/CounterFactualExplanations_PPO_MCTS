@@ -13,3 +13,23 @@ Average steps per successful counterfactual: 3.91
 Total time: 189.54 seconds
 Proximity KPI: 0.2794
 Sparsity KPI: 1.67
+
+
+
+
+
+
+
+No valid counterfactuals found for sample 39 in generation 8. Skipping distance calculation.
+Generating counterfactual(s) for sample 40:  82%|██████████████████████     | 40/49 [01:03<00:14,  1.57s/it]No valid counterfactuals found for sample 40 in generation 8. Skipping distance calculation.
+Generating counterfactual(s) for sample 47:  96%|█████████████████████████▉ | 47/49 [01:13<00:03,  1.58s/it]No valid counterfactuals found for sample 47 in generation 8. Skipping distance calculation.
+Generating counterfactual(s) for sample 48: 100%|███████████████████████████| 49/49 [01:16<00:00,  1.57s/it]
+Number of samples for which no counterfactuals were found:  29
+Mean distance of the generated counterfactuals from the original sample:  1034.1632653061224
+Proximity KPI : 2.6908
+Sparsity KPI : 12.6939
+(Unnormalised) model's robustness:
+1034.1632653061224
+
+(Normalised) model's robustness:
+0.02033904102219917 

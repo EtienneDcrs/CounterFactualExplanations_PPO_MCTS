@@ -9,7 +9,7 @@ from stable_baselines3.common.evaluation import evaluate_policy
 from tqdm import tqdm
 
 from PPO_env import PPOEnv, PPOMonitorCallback
-from Classifier_model import Classifier, train_model, load_classifier_with_preprocessing, test_model_accuracy
+from Classifier_model import Classifier, train_model
 from PPO_MCTS import PPOMCTS
 from KPIs import proximity_KPI, sparsity_KPI
 import warnings
@@ -50,13 +50,38 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
     os.makedirs(save_dir, exist_ok=True)
     os.makedirs('data', exist_ok=True)
     
-    classifier, label_encoders, scaler = load_classifier_with_preprocessing(dataset_path, model_path)
+    # Determine the output size based on the dataset
+    out = None
+    if dataset_path.endswith('.csv'):
+        # Load the dataset to determine the number of classes
+        dataset = pd.read_csv(dataset_path)
+        out = len(dataset.iloc[:, -1].unique())
+    else:
+        # Default case - try to determine from the dataset
+        dataset = pd.read_csv(dataset_path)
+        out = len(dataset.iloc[:, -1].unique())
+    
+    # Load or train the classifier model
+    if model_path is None:
+        model_path = f"{os.path.splitext(os.path.basename(dataset_path))[0]}_model.pt"
+        model_path = os.path.join("classification_models", model_path)
+    # Check if the classifier model exists, otherwise exit
 
-    # Test with default 20% test split
-    accuracy, predictions, true_labels = test_model_accuracy(classifier, dataset_path, label_encoders, test_split=1)
-    print(f"Classifier accuracy on test set: {accuracy:.2f}")
+    if not os.path.exists(model_path):
+        print(f"Classifier model not found at {model_path}. Training a new one.")
+        train_model(dataset_path, model_path)
 
+    print(f"Loading classifier model from {model_path}")
+    # Load dataset to determine input features
+    dataset = pd.read_csv(dataset_path)
+    in_feats = len(dataset.columns) - 1  # Exclude target variable
+    
+    # Load the classifier model
+    classifier = Classifier(in_feats=in_feats, out=out)
+    classifier.load_state_dict(torch.load(model_path))
+    classifier.eval()  # Set to evaluation mode
 
+    
     # Create the PPO environment
     env = PPOEnv(dataset_path=dataset_path, model=classifier)
     eval_env = PPOEnv(dataset_path=dataset_path, model=classifier)
@@ -370,14 +395,12 @@ def _save_counterfactuals(counterfactuals, original_data, save_path):
   
     return counterfactuals
 
-TOTAL_TIMESTEPS = 00000  # Total timesteps for training
+TOTAL_TIMESTEPS = 5000  # Total timesteps for training
 
 def main():
     # Specify the dataset path
     dataset_path = 'data/diabetes.csv'
     dataset_path = 'data/drug200.csv'
-    dataset_path = 'data/breast_cancer.csv'
-    dataset_path = 'data/adult.csv'
     
     # Create logs and model directories
     logs_dir = 'ppo_logs'
@@ -385,7 +408,7 @@ def main():
     os.makedirs('data', exist_ok=True)
     
     # Define whether to continue training an existing model
-    continue_training = True
+    continue_training = False
     
 
     # Train the PPO model (will load and continue if it exists)

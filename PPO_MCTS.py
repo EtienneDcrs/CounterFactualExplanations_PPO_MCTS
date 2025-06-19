@@ -93,9 +93,46 @@ class PPOMCTS:
         - env: Copy of the environment
         - state: State representation from MCTS node
         """
-        # Extract features from state representation
-        env.modified_features = state[:len(env.original_features)]
- 
+        # The state is the full observation vector - we need to decode it back to raw features
+        feature_dim = len(env.original_features)
+        
+        # The observation structure is: [original_encoded, modified_encoded, metadata]
+        # We need to extract just the modified features portion and decode it
+        
+        # First, check if the state is a raw state or an encoded observation
+        if len(state) > feature_dim * 2:  # It's a full observation
+            # Store the encoded modified features for reference (needed for prediction)
+            encoded_modified = state[feature_dim:feature_dim*2]
+            
+            # Create a copy of the original features to modify
+            env.modified_features = env.original_features.copy()
+            
+            # For each feature, check if it was modified in the observation
+            for i, (orig_val, enc_val) in enumerate(zip(env.original_features, encoded_modified)):
+                feature_info = env.feature_ranges.get(i, {})
+                
+                # For categorical features, we need to map back to original values
+                if feature_info.get('type') == 'categorical' or isinstance(orig_val, str):
+                    # Find the original categorical value
+                    for idx, n_cats, cat_values in env.cats_ids:
+                        if idx == i:
+                            # Try to find the matching categorical value
+                            try:
+                                # Find the nearest categorical index based on encoded value
+                                cat_idx = int(round(enc_val)) % len(cat_values)
+                                # Set the actual categorical value
+                                env.modified_features[i] = cat_values[cat_idx]
+                            except:
+                                # Keep original if mapping fails
+                                env.modified_features[i] = orig_val
+                else:
+                    # For continuous features, just use the encoded value directly if it changed
+                    if abs(encoded_modified[i] - state[i]) > 1e-6:
+                        env.modified_features[i] = encoded_modified[i]
+        else:
+            # If the state is already the raw features, use it directly
+            env.modified_features = state[:feature_dim].copy()
+
         # Ensure the prediction is updated
         env.current_prediction = env.generate_prediction(env.model, env.modified_features)
 
@@ -274,7 +311,7 @@ class PPOMCTS:
         # If terminal state, use the terminal reward
         if counterfactual_found or max_steps_reached:
             # Calculate the terminal reward
-            distance = virtual_env.calculate_distance()
+            distance = virtual_env.calculate_distance(virtual_env.modified_features, virtual_env.original_features)
             reward = virtual_env.calculate_reward(
                 distance=distance,
                 counterfactual_found=counterfactual_found,

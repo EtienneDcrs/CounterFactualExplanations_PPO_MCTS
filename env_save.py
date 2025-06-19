@@ -39,9 +39,6 @@ class PPOEnv(gym.Env):
         self.con_columns, self.cat_columns = self.get_con_cat_columns(self.tab_dataset)
         self.cats_ids = self.generate_cats_ids(self.tab_dataset)
         
-        # KEY FIX 1: Create categorical mapping for proper encoding
-        self.cat_mappings = self._create_categorical_mappings()
-        
         # Precompute feature ranges for normalization (for continuous features only)
         self.feature_ranges = self._compute_feature_ranges()
         
@@ -64,8 +61,12 @@ class PPOEnv(gym.Env):
         
         # Default constraints (which features can be modified)
         self.constraints = [1] * (len(self.tab_dataset.columns) - 1)  # Exclude target variable
-        #self.constraints[10] = 0  # Example: feature at index 10 is fixed
         
+        # For each categorical feature, set constraints to 0
+        for i, feature in enumerate(self.tab_dataset.columns[:-1]):  # Exclude target variable
+            if feature in self.cat_columns:
+                self.constraints[i] = 0          
+
         # Define action space based on features that can be modified
         self.define_action_space()
         
@@ -89,21 +90,9 @@ class PPOEnv(gym.Env):
         )
         
         # Episode settings
-        self.max_steps = 500
+        self.max_steps = 50
         self.reward_range = (-100, 100)
         self.done = False
-
-    # KEY FIX 1: Create proper categorical mappings for encoding
-    def _create_categorical_mappings(self):
-        """Create proper categorical mappings for encoding."""
-        cat_mappings = {}
-        
-        for idx, n_cats, cat_values in self.cats_ids:
-            column_name = self.tab_dataset.columns[idx]
-            # Create mapping from category value to index
-            cat_mappings[column_name] = {cat_val: i for i, cat_val in enumerate(cat_values)}
-        
-        return cat_mappings
 
     def _compute_feature_ranges(self):
         """Precompute feature ranges for efficient distance calculation."""
@@ -114,12 +103,11 @@ class PPOEnv(gym.Env):
                 # For continuous features, store min and max values
                 min_val = self.tab_dataset[column].min()
                 max_val = self.tab_dataset[column].max()
-                avg_val = self.tab_dataset[column].mean()
                 feature_ranges[i] = {
                     'type': 'continuous',
                     'min': min_val,
                     'max': max_val,
-                    'range': min(avg_val, max_val - min_val) 
+                    'range': max_val - min_val if max_val != min_val else 1.0
                 }
             else:
                 # For categorical features, just mark as categorical
@@ -169,22 +157,19 @@ class PPOEnv(gym.Env):
         """
         # Increment step counter
         self.steps_taken += 1
-
         
         # Apply the selected action to modify features
         self.modified_features = self.apply_action(action)
+        # self.original_encoded = self.encode_features(self.original_features)
+        # self.modified_encoded = self.encode_features(self.modified_features)
         
         # Get the new prediction
         modified_prediction = self.generate_prediction(self.model, self.modified_features)
         
         # Calculate distance between original and modified features (using raw features)
+        #distance = self._hybrid_distance(self.original_features, self.modified_features)
         distance = self.calculate_distance(self.original_features, self.modified_features)
-        
-        if self.steps_taken == self.max_steps - 1 :
-            print(f"Original features: {self.original_features}")
-            print(f"Modified features: {self.modified_features}")
-            print(f"Distance: {distance}")
-    
+
         # Determine if we found a counterfactual (class changed)
         counterfactual_found = (modified_prediction != self.original_prediction)
         
@@ -213,6 +198,7 @@ class PPOEnv(gym.Env):
     def _get_observation(self):
         """Create observation vector from current state."""
         # Add metadata to the observation: steps taken, distance, normalized progress
+        #distance = self._hybrid_distance(self.original_features, self.modified_features)
         distance = self.calculate_distance(self.original_features, self.modified_features)
         steps_normalized = self.steps_taken / self.max_steps
         
@@ -233,6 +219,18 @@ class PPOEnv(gym.Env):
 
     def calculate_distance(self, original_features, modified_features):
         """Calculate the distance between original and modified features using raw features."""
+    #     try:
+    #         # Use raw features (not encoded) for distance calculation
+    #         # distance = self.distance(self.original_features, self.modified_features)
+    #         dist = 0
+    #         for i, feature in enumerate(self.modified_features):
+    #             dist += abs(self.original_features[i] - feature)
+    #         return dist
+    #     except Exception as e:
+    #         print(f"Error calculating distance: {e}")
+    #         return float('inf')
+        
+    # def _hybrid_distance(self, original_features, modified_features):
         """
         Calculate hybrid distance that treats categorical and continuous features differently.
         
@@ -253,38 +251,29 @@ class PPOEnv(gym.Env):
         num_features = len(original_features)
         
         for i in range(num_features):
-            feature_info = self.feature_ranges.get(i, {})
+            feature_info = self.feature_ranges[i]
             orig_val = original_features[i]
             mod_val = modified_features[i]
             
-            if feature_info['type'] == 'categorical' or isinstance(orig_val, str) or isinstance(orig_val, bool):
+            if feature_info['type'] == 'categorical':
+                # print(f"Feature {i} is categorical: {orig_val} vs {mod_val}")
                 # Categorical feature: 100% change if different, 0% if same
-                if pd.isna(orig_val) and pd.isna(mod_val):
-                # Both are NaN - no change
-                    continue  # No contribution to distance
-                elif pd.isna(orig_val) or pd.isna(mod_val):
-                    # One is NaN, the other isn't - they differ
-                    total_distance += 1.0
-                elif orig_val != mod_val:
+                if orig_val != mod_val:
                     total_distance += 1.0  # 100% change
+                # else: 0% change (no contribution to distance)
                 
             else:  # continuous feature
-                if pd.isna(orig_val) or pd.isna(mod_val):
-                    total_distance += 1.0  # Consider NaN as a significant change
                 # Continuous feature: relative percentage change
-                elif orig_val != mod_val:
+                if feature_info['range'] > 0:
                     # Calculate relative change as percentage of feature range
-                    try:
-                        relative_change = max(mod_val, orig_val) / min(mod_val, orig_val) - 1 if min(mod_val, orig_val) != 0 else max(mod_val, orig_val)
-                        total_distance += relative_change
-                    except:
-                        print(f"Error calculating relative change for feature {i}: {orig_val} -> {mod_val}")
+                    #relative_change = abs(mod_val - orig_val) / feature_info['range']
+                    relative_change = max(mod_val, orig_val) / min(mod_val, orig_val) if min(mod_val, orig_val) != 0 else 1.0
+                    total_distance += relative_change
                 # else: feature has no variance, no contribution to distance
         
         # Normalize by number of features to get average distance per feature
         return total_distance
 
-    # KEY FIX 5: Better reward structure
     def calculate_reward(self, distance, counterfactual_found, stage=1):
         """
         Calculate the reward for the current step based on the training stage.
@@ -300,18 +289,17 @@ class PPOEnv(gym.Env):
         if counterfactual_found:
             # Higher reward for successful counterfactual
             base_reward = 100.0
-            distance_reward = 10 / (distance + 1e-3)
+            distance_reward = 100 / (distance + 1e-6)  # Add small epsilon to avoid division by zero
             base_reward += distance_reward
             return max(base_reward, 10.0)  # Ensure minimum positive reward for success
         else:
-            # If no counterfactual found, less harsh penalty to allow exploration
-            reward = -0.5  # Reduced from -1
+            # If no counterfactual found, penalize
+            reward = -1
             return reward
 
-    # KEY FIX 4: Improved action application with random categorical selection
-    def apply_action(self, action_idx):
+    def apply_action(self, action_idx, stage=1):
         """
-        Apply the selected action to modify features, with improved categorical handling.
+        Apply the selected action to modify features, with stage-specific behaviors.
 
         Parameters:
             action_idx: Index of the action to take
@@ -325,6 +313,7 @@ class PPOEnv(gym.Env):
 
         # Create a copy of the current features to modify
         modified_features = self.modified_features.copy()
+        # print(f"Applying action: {action_name}")
         try:
             # Extract feature name from action name
             if '_' in action_name:
@@ -334,6 +323,7 @@ class PPOEnv(gym.Env):
 
                 # Handle categorical features
                 if action_type == 'change':
+                    print(f"Changing feature: {feature_name} at index {feature_index}")
                     for idx, ncat, cat_values in self.cats_ids:
                         # Skip if not applicable
                         if idx != feature_index or ncat <= 1:
@@ -342,37 +332,56 @@ class PPOEnv(gym.Env):
                         # Get current category value (raw value, not encoded)
                         current_value = modified_features[feature_index]
 
-                        # For categorical features, use random selection instead of deterministic cycling
+                        # For categorical features, systematically try different categories
                         available_values = [val for val in cat_values if val != current_value]
 
-                        # Random selection for better exploration
+                        # Select next category in a deterministic way
                         if available_values:
-                            next_value = np.random.choice(available_values)
+                            # Choose next category based on step count for more systematic exploration
+                            next_value = available_values[self.steps_taken % len(available_values)]
                             modified_features[feature_index] = next_value
 
                 # Handle continuous features with adaptive step sizes
                 elif action_type in ['increase', 'decrease']:
                     current_value = modified_features[feature_index]
-                    if current_value != 0:
-                        base_step = abs(current_value) * 0.1  # 10% of current value
+
+                    # Adaptive step size based on progress through episode and training stage
+                    progress = self.steps_taken / self.max_steps
+
+                    # Stage-specific step size adjustments
+                    if stage == 1:
+                        # Stage 1: Larger steps for exploration
+                        base_step = 0.20  # 20% change for broader exploration
+                        fine_step = 0.10  # 10% change
                     else:
-                        # More reasonable step sizes based on feature range
-                        feature_range = self.feature_ranges[feature_index]['range']
-                        base_step = feature_range * 0.1  # 10% of feature range
+                        # Stage 2: Smaller steps for refinement
+                        base_step = 0.10  # 10% change
+                        fine_step = 0.03  # 3% change for fine-tuning
+
+                    # Adaptive step size: larger at beginning, finer as we progress
+                    step_size = base_step * (1 - progress) + fine_step * progress
 
                     # Apply the step
                     if action_type == 'increase':
                         max_value = self.tab_dataset.iloc[:, feature_index].max()
-                        new_value = min(current_value + base_step, max_value)
+                        calculated_value = current_value * (1 + step_size)
+
+                        # Round if the feature is integer type
+                        if self.tab_dataset.iloc[:, feature_index].dtype in [np.int64, np.int32, int]:
+                            calculated_value = int(calculated_value)
+
+                        new_value = min(calculated_value, max_value)
                         modified_features[feature_index] = new_value
                     else:  # decrease
                         min_value = self.tab_dataset.iloc[:, feature_index].min()
-                        new_value = max(current_value - base_step, min_value)
-                        modified_features[feature_index] = new_value
+                        calculated_value = current_value * (1 - step_size)
 
-                    # Round if the feature is integer type
-                    if self.tab_dataset.iloc[:, feature_index].dtype in [np.int64, np.int32, int]:
-                        modified_features[feature_index] = int(round(modified_features[feature_index]))
+                        # Round if the feature is integer type
+                        if self.tab_dataset.iloc[:, feature_index].dtype in [np.int64, np.int32, int]:
+                            calculated_value = int(calculated_value)
+
+                        new_value = max(calculated_value, min_value)
+                        modified_features[feature_index] = new_value
 
         except Exception as e:
             print(f"Error applying action {action_name}: {e}")
@@ -380,24 +389,22 @@ class PPOEnv(gym.Env):
 
         return modified_features
 
-    # KEY FIX 1: Fixed categorical encoding
     def encode_features(self, features):
-        """Encode features for the model input with proper categorical mapping."""
+        """Encode features for the model input."""
         # Create a DataFrame for easier handling
         features_df = pd.DataFrame([features], columns=self.tab_dataset.columns[:-1])
         
         # Create a copy to avoid modifying the original
         encoded_features = features_df.copy()
         
-        # FIXED: Proper categorical encoding using mappings
-        for column_name, mapping in self.cat_mappings.items():
-            if column_name in encoded_features.columns:
-                # Get the current value
-                current_val = encoded_features[column_name].iloc[0]
-                
-                # Map to index, default to 0 if not found
-                encoded_val = mapping.get(current_val, 0)
-                encoded_features[column_name] = encoded_val
+        # Encode categorical features
+        for idx, n_cats, cat_values in self.cats_ids:
+            if idx < len(encoded_features.columns):  # Ensure we don't go out of bounds
+                for i, cat_value in enumerate(cat_values):
+                    # Replace categorical values with their index
+                    encoded_features.iloc[:, idx] = np.where(
+                        encoded_features.iloc[:, idx] == cat_value, i, encoded_features.iloc[:, idx]
+                    )
         
         # Convert to numeric, handle NaNs
         encoded = encoded_features.astype(float).values.flatten()

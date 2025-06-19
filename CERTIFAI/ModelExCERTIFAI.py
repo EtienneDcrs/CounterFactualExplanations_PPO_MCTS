@@ -11,6 +11,8 @@ from collections import OrderedDict
 from CERTIFAI import CERTIFAI 
 from torch.utils.data import TensorDataset, DataLoader
 from pytorch_lightning.callbacks import EarlyStopping
+
+from Classifier_model import load_classifier_with_preprocessing
 warnings.filterwarnings("ignore")
 
 
@@ -72,6 +74,7 @@ class Classifier(pl.LightningModule):
 
 # Load dataset
 url = 'data/diabetes_100.csv'
+url = 'data/adult.csv'
 cert = CERTIFAI.from_csv(url)
 
 # Prepare data
@@ -96,22 +99,26 @@ val_loader = DataLoader(
 )
 
 model_path = 'diabetes_model.pt'
+model_path = 'adult_model.pt'
 model_path = os.path.join("classification_models", model_path)
 # Check if model already exists
-try:
-    model = Classifier(in_feats=predictors.shape[1])
-    model.load_state_dict(torch.load(model_path))
-    print("Model loaded successfully.")
-except FileNotFoundError:
-    print("Model not found, training a new one.")
+# try:
+#     model = Classifier(in_feats=predictors.shape[1])
+#     model.load_state_dict(torch.load(model_path))
+#     print("Model loaded successfully.")
+# except FileNotFoundError:
+#     print("Model not found, training a new one.")
 
-    # Train model
-    trainer = pl.Trainer(max_epochs=max_epochs, callbacks=[early_stop])
-    model = Classifier()
-    trainer.fit(model, train_loader, val_loader)
+#     # Train model
+#     trainer = pl.Trainer(max_epochs=max_epochs, callbacks=[early_stop])
+#     model = Classifier()
+#     trainer.fit(model, train_loader, val_loader)
 
-    # Save the model
-    torch.save(model.state_dict(), model_path)
+#     # Save the model
+#     torch.save(model.state_dict(), model_path)
+
+model, label_encoders, scaler = load_classifier_with_preprocessing(url, model_path)
+
 
 # Generate counterfactual
 cert.fit(model, generations=15, verbose=True)

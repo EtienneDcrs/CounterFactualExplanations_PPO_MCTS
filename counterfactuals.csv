@@ -1,101 +1,50 @@
-Pregnancies,Glucose,BloodPressure,SkinThickness,Insulin,BMI,DiabetesPedigreeFunction,Age
-0.0,144.0,57.5,38.0,14.0,32.47,0.66,30.5
-8.0,59.0,50.5,22.0,2.0,16.975,1.52,43.0
-3.0,183.5,38.0,14.5,25.0,23.53,1.3199999999999998,43.5
-7.0,59.0,60.0,24.0,126.0,28.58,0.36,35.0
-11.0,123.0,45.0,47.0,171.0,27.66,0.81,28.0
-13.0,110.0,85.0,41.0,33.0,25.3,2.95,28.0
-10.0,79.0,54.0,49.0,73.0,9.31,2.78,33.0
-11.0,99.0,38.0,4.0,9.0,23.84,1.2,42.0
-1.0,190.0,100.0,59.0,593.0,36.44,2.23,58.0
-7.0,124.0,70.0,0.0,34.0,37.39,1.67,47.0
-2.0,151.0,89.0,21.0,7.0,19.78,2.88,49.0
-7.0,168.0,31.0,0.0,58.0,36.88,2.24,45.0
-0.0,148.0,55.0,4.0,9.0,27.05,3.1,28.0
-2.0,130.0,55.0,17.5,826.0,34.07,0.15,58.0
-4.0,181.0,106.0,17.0,182.0,23.94,0.43,49.0
-8.0,101.0,68.0,6.0,16.0,44.12,2.37,37.0
-13.0,113.0,80.0,27.0,230.0,0.98,0.49,40.0
-14.0,109.0,30.0,5.0,1.0,8.6,1.84,27.0
-1.0,109.0,4.0,29.0,109.0,30.33,1.0,35.0
-3.0,91.0,65.0,32.0,102.0,1.9,1.96,24.0
-3.0,125.0,94.0,36.0,259.0,20.44,3.09,32.0
-9.0,104.0,101.0,5.0,38.0,26.08,0.3,50.0
-10.0,193.0,41.0,15.0,3.0,44.11,2.5,54.0
-3.0,115.0,79.0,24.0,0.0,15.23,3.03,25.0
-14.0,124.0,106.0,6.0,148.25,39.47,0.16,60.0
-9.0,105.0,87.0,33.0,83.0,19.48,1.69,38.0
-13.0,131.0,47.0,10.0,1.0,37.19,1.97,54.0
-3.0,89.0,87.0,16.0,170.0,19.94,2.17,42.0
-12.0,144.0,86.0,50.0,111.0,39.31,1.7,53.0
-5.0,153.0,67.25,5.0,11.0,26.76,2.23,46.0
-9.0,90.0,87.0,7.0,11.0,17.14,0.91,56.5
-4.0,156.0,80.0,22.0,237.0,4.51,3.18,32.0
-4.0,80.0,38.0,24.0,63.0,28.44,2.43,27.0
-11.0,71.0,92.0,24.0,5.0,28.24,2.89,27.0
-5.0,116.0,87.0,38.0,31.0,39.93,2.5,41.0
-7.0,97.0,74.0,38.0,191.0,26.75,2.175,32.0
-5.0,107.0,67.0,6.0,9.0,42.8,2.63,41.0
-5.0,94.0,19.0,38.0,10.0,29.69,2.17,33.0
-13.0,118.0,64.0,23.0,8.0,39.86,0.38,41.0
-4.0,111.0,80.0,51.0,256.0,45.69,1.79,40.0
-1.0,157.0,45.0,53.0,68.0,37.894999999999996,2.45,31.5
-13.0,137.0,81.0,2.0,25.0,9.6,1.01,53.0
-14.0,108.0,95.0,24.0,8.0,33.36,1.48,27.0
-6.0,178.0,108.0,22.0,220.0,43.67,1.33,56.0
-5.0,134.0,70.0,6.0,0.0,19.9,2.02,50.0
-0.0,178.0,66.0,0.0,33.0,25.27,2.81,55.0
-0.0,118.0,43.0,0.0,8.0,15.3,2.95,31.0
-1.0,101.0,86.0,30.0,42.0,21.95,0.72,24.0
-8.0,83.0,29.0,39.5,5.0,38.47,0.1,23.0
-6.0,139.0,46.0,5.0,21.0,18.78,1.78,34.0
-1.0,109.0,101.0,8.0,82.0,12.33,1.48,37.0
-6.0,98.0,60.0,13.0,33.0,39.79,2.35,32.0
-7.0,78.0,70.0,21.0,39.0,29.29,1.87,38.0
-11.0,107.0,88.0,30.0,297.0,37.33,0.92,52.0
-5.0,153.0,61.0,46.5,332.0,45.52,1.51,29.0
-12.0,61.0,70.0,7.0,5.0,9.8,1.11,24.0
-10.0,185.0,78.0,35.5,309.0,12.64,2.07,52.0
-6.0,93.0,87.0,52.0,148.0,23.69,2.8,35.0
-3.0,152.0,94.0,4.0,31.0,14.22,0.74,47.0
-7.0,90.0,79.0,49.0,141.0,41.88,3.04,46.0
-0.0,62.0,15.0,11.0,19.0,24.23,1.72,37.0
-6.0,137.0,70.0,24.0,2.0,39.39,1.96,35.0
-14.0,45.0,75.0,11.0,17.0,21.36,1.33,54.0
-8.0,122.0,47.0,46.0,141.0,26.78,1.51,36.0
-10.0,126.0,104.0,0.0,11.0,32.81,2.7,47.0
-7.0,102.5,80.0,32.0,2.0,34.34,0.3,44.0
-8.0,92.0,66.0,31.0,30.0,17.55,0.21,39.0
-0.0,65.0,87.0,26.0,8.0,34.33,2.65,56.0
-5.0,86.0,64.0,14.0,3.0,19.56,0.48,39.5
-6.0,142.0,101.0,15.0,97.0,10.52,2.55,44.0
-1.0,83.0,58.0,23.0,86.0,48.63,1.39,45.0
-7.0,133.0,45.5,40.0,170.0,14.88,0.15,29.0
-14.0,120.0,110.0,25.0,46.0,41.39,1.2,54.0
-3.0,101.0,54.0,28.0,268.0,32.25,0.52,52.0
-7.0,124.5,73.0,44.0,5.0,30.375,2.085,26.0
-4.0,8.0,12.0,38.5,9.0,20.605,1.2,43.0
-6.5,63.0,60.0,20.0,2.0,27.445,2.35,51.0
-3.0,122.0,107.0,27.0,5.0,44.37,2.97,32.0
-3.0,159.0,34.0,30.0,4.0,33.53,2.5,24.0
-3.0,123.0,79.0,18.0,2.0,25.38,1.51,40.5
-4.0,88.0,66.0,5.0,12.0,23.83,3.26,40.0
-4.0,98.0,39.0,14.0,7.0,19.65,0.25,31.0
-12.0,81.0,74.0,33.0,59.0,26.48,3.22,35.0
-8.0,92.0,56.0,12.0,25.0,14.06,3.1,24.0
-0.0,110.0,99.0,9.0,75.0,49.36,3.0,29.0
-6.0,119.0,71.0,55.0,100.0,32.54,1.45,36.0
-7.0,105.0,65.0,35.5,26.0,19.0,1.8,51.0
-13.0,78.0,45.0,18.0,80.0,31.16,2.06,35.0
-11.0,146.0,63.0,36.0,143.0,22.96,3.11,51.0
-2.5,92.5,69.0,21.0,16.0,42.59,2.99,29.5
-1.0,51.0,98.0,9.0,4.0,46.12,3.21,27.0
-15.0,129.0,66.0,40.0,162.0,24.94,2.46,28.0
-6.0,79.0,56.0,38.0,68.0,30.39,1.54,46.5
-1.0,73.0,80.0,7.0,13.0,32.15,2.15,52.0
-0.0,183.0,80.0,15.0,64.0,18.12,0.59,26.0
-10.0,166.0,67.0,23.0,222.0,29.99,0.48,23.0
-8.5,92.5,88.0,18.0,8.0,1.26,1.22,31.0
-6.0,62.0,41.5,12.0,100.0,38.12,2.68,22.0
-5.0,103.0,68.0,26.0,81.0,28.89,3.18,25.5
-4.0,129.0,109.0,46.0,239.0,14.87,3.22,31.0
+age,workclass,fnlwgt,education,education-num,marital-status,occupation,relationship,race,sex,capital-gain,capital-loss,hours-per-week,native-country
+58, Federal-gov,76207, Doctorate,9, Married-AF-spouse, Farming-fishing, Not-in-family, Black, Male,2581,60,23, India
+40, Local-gov,83547, Assoc-acdm,12, Married-civ-spouse, Other-service, Unmarried, Black, Female,235,888,79, India
+33, Self-emp-not-inc,215610, 7th-8th,12, Never-married, Exec-managerial, Unmarried, Amer-Indian-Eskimo, Female,1224,437,29, South
+48, Private,235398, Masters,8, Separated, Other-service, Not-in-family, Asian-Pac-Islander, Male,1281,1384,47,nan
+41, Private,338582, Masters,13, Married-AF-spouse, Adm-clerical, Own-child, Amer-Indian-Eskimo, Female,953,1148,34, United-States
+43, Federal-gov,284541, Assoc-acdm,12, Divorced,nan, Wife, Asian-Pac-Islander, Male,1783,467,17, Cuba
+30, State-gov,159736, Assoc-acdm,11, Separated, Adm-clerical, Wife, Asian-Pac-Islander, Female,1291,617,41, United-States
+31, Federal-gov,210149, Some-college,14, Married-spouse-absent, Sales, Unmarried, White, Female,1806,1232,54, India
+38, Private,46064, 11th,10, Separated, Handlers-cleaners, Not-in-family, Black, Female,13436,1467,29, Mexico
+23,nan,158846, HS-grad,14, Separated, Exec-managerial, Not-in-family, Black, Male,5353,257,64, Cuba
+52, State-gov,278734, 7th-8th,9, Married-civ-spouse, Adm-clerical, Wife, White, Male,397,910,61, India
+48, Private,142389, Doctorate,4, Married-spouse-absent, Sales, Wife, Black, Female,186,737,61, United-States
+24, Federal-gov,122118, HS-grad,16, Married-civ-spouse, Other-service, Not-in-family, Asian-Pac-Islander, Female,1309,259,41, South
+40, Federal-gov,206293, Assoc-voc,11, Married-spouse-absent, Sales, Unmarried, Amer-Indian-Eskimo, Male,129,251,57, Cuba
+52,nan,125117, Bachelors,11, Separated, Transport-moving, Own-child, White, Male,1032,249,62, India
+42, Private,245358, Some-college,16, Never-married, Prof-specialty, Unmarried, Black, Female,1855,766,23,nan
+29, State-gov,175708, HS-grad,13, Separated, Machine-op-inspct, Husband, Asian-Pac-Islander, Female,665,253,72, Cuba
+58, Federal-gov,187076, Assoc-acdm,13, Separated, Adm-clerical, Husband, Amer-Indian-Eskimo, Female,131,1402,47, South
+23, State-gov,29925, HS-grad,7, Married-spouse-absent, Handlers-cleaners, Unmarried, Asian-Pac-Islander, Female,1927,1157,40, United-States
+20,nan,293466, Some-college,13, Married-spouse-absent, Prof-specialty, Not-in-family, Amer-Indian-Eskimo, Female,1740,80,74,nan
+48, Local-gov,194532, Assoc-voc,13, Separated, Adm-clerical, Not-in-family, White, Male,0,1912,72, United-States
+53, Private,302263, 11th,6, Married-civ-spouse, Adm-clerical, Unmarried, Amer-Indian-Eskimo, Male,342,326,37, India
+20,nan,77333, 11th,5, Married-AF-spouse, Craft-repair, Not-in-family, Amer-Indian-Eskimo, Female,472,517,73, Jamaica
+49, Self-emp-not-inc,117262, Assoc-voc,14, Separated, Other-service, Not-in-family, Amer-Indian-Eskimo, Male,154,46,51, Jamaica
+41, Local-gov,107566, 7th-8th,15, Never-married, Transport-moving, Unmarried, Black, Female,1422,164,44, Mexico
+47, State-gov,217910, Doctorate,15, Never-married, Transport-moving, Own-child, Black, Female,509,358,71, India
+51, Self-emp-not-inc,169178, 7th-8th,11, Married-civ-spouse, Prof-specialty, Not-in-family, Black, Female,1018,895,17, Mexico
+35,nan,179203, HS-grad,15, Married-spouse-absent, Transport-moving, Own-child, Amer-Indian-Eskimo, Male,61,424,57,nan
+22, State-gov,365950, Some-college,7, Married-AF-spouse, Farming-fishing, Own-child, Asian-Pac-Islander, Male,2079,86,40, India
+51, Private,194015, Bachelors,8, Married-spouse-absent, Prof-specialty, Own-child, White, Female,548,189,29, South
+52,nan,191644, Doctorate,11, Divorced, Machine-op-inspct, Unmarried, Amer-Indian-Eskimo, Female,1049,84,16, Puerto-Rico
+28, State-gov,266631, Some-college,10, Married-spouse-absent, Adm-clerical, Not-in-family, Asian-Pac-Islander, Male,324,853,40, India
+46, Private,386759, Some-college,14, Married-spouse-absent, Tech-support, Unmarried, Amer-Indian-Eskimo, Female,1017,1182,35, Jamaica
+22, Self-emp-not-inc,61394, Masters,6, Married-civ-spouse, Other-service, Not-in-family, Amer-Indian-Eskimo, Female,602,928,50, South
+45, Federal-gov,310330, 11th,12, Married-AF-spouse, Transport-moving, Husband, Amer-Indian-Eskimo, Male,686,236,75, South
+38, Federal-gov,240862, 11th,9, Married-spouse-absent, Machine-op-inspct, Own-child, Asian-Pac-Islander, Male,1058,300,43,nan
+43, Federal-gov,197486, Bachelors,5, Divorced, Farming-fishing, Own-child, Black, Female,568,422,13, Cuba
+56, State-gov,541846, Assoc-voc,12, Married-civ-spouse, Transport-moving, Husband, White, Female,528,576,18, Jamaica
+46, Private,83382, 9th,12, Divorced, Craft-repair, Not-in-family, Amer-Indian-Eskimo, Male,453,48,21, Mexico
+38, State-gov,264749, Bachelors,9, Married-civ-spouse, Other-service, Own-child, Black, Female,2093,318,74, Puerto-Rico
+27, State-gov,508650, 11th,15, Separated, Farming-fishing, Own-child, Black, Male,2462,168,57, United-States
+44, Local-gov,91242, Doctorate,11, Married-AF-spouse, Tech-support, Husband, Black, Female,707,267,74, Cuba
+47, State-gov,173239, Assoc-voc,9, Divorced, Other-service, Wife, White, Female,161,487,27, Puerto-Rico
+31, Private,93959, 9th,13, Separated, Prof-specialty, Own-child, Asian-Pac-Islander, Male,3422,511,70, Cuba
+52, Local-gov,289792, Masters,4, Never-married, Transport-moving, Own-child, Asian-Pac-Islander, Female,138,1771,25, Puerto-Rico
+37, Private,337641, 7th-8th,10, Divorced, Adm-clerical, Unmarried, Asian-Pac-Islander, Male,894,1510,40, Puerto-Rico
+51, Private,143565, Assoc-acdm,9, Divorced, Other-service, Not-in-family, Asian-Pac-Islander, Female,49,189,69, India
+52, Local-gov,127636, 11th,10, Divorced, Transport-moving, Husband, White, Male,294,334,19, India
+57, Private,101113, HS-grad,9, Separated, Protective-serv, Own-child, Amer-Indian-Eskimo, Male,1336,1605,31, South

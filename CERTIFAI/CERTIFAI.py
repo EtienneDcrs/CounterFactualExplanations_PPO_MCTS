@@ -242,7 +242,7 @@ class CERTIFAI:
         
         if x is None:
             assert self.tab_dataset is not None, 'If input is not provided, the class needs to be instatiated\
-                with an associated csv file, otherwise there is no input data for inferring population size.'
+                with a csv file, otherwise there is no input data for inferring population size.'
             
             x = self.tab_dataset
         
@@ -784,7 +784,7 @@ class CERTIFAI:
                 for that data sample and their distance(s).
         '''
         cfes = []
-        
+        not_found = 0
         
         if x is None:
             assert self.tab_dataset is not None, 'Either an input is passed into\
@@ -894,6 +894,12 @@ class CERTIFAI:
                 
                 final_generation = crossed_generation.loc[diff_prediction]
                 
+                if len(final_generation) == 0:
+                    #if verbose:
+                    print(f"No valid counterfactuals found for sample {i} in generation {g}. Skipping distance calculation.")
+                    not_found += 1
+                    continue
+                
                 final_distances = self.distance(sample, final_generation)[0]
                 
                 final_generation, counterfacts_fit = self.generate_counterfacts_list_dictionary(
@@ -922,7 +928,7 @@ class CERTIFAI:
         cfes.columns = x.columns.tolist()
         cfes.to_csv('counterfactuals.csv', index=False)
         
-
+        print("Number of samples for which no counterfactuals were found: ", not_found)
         mean_distance = np.array([result[2][0] for result in self.results]).mean()
         print("Mean distance of the generated counterfactuals from the original sample: ", mean_distance)
 
