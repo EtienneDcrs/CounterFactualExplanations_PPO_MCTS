@@ -33,3 +33,44 @@ Sparsity KPI : 12.6939
 
 (Normalised) model's robustness:
 0.02033904102219917 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Original Instance: 21, Private, 57211, HS-grad, 9, Never-married, Craft-repair, 
+Own-child, White, Male, 0, 0, 40, United-States
+
+Modified Instance: 26, Federal-gov, 29060, Masters, 11, Married-AF-spouse, Other-service, 
+Own-child, Amer-Indian-Eskimo, Male, 141, 14, 12, Taiwan
+
+Distance: 164.76237068353382
+
+
+
+
+
+
+
+
+

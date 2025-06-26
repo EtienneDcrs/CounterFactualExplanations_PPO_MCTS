@@ -3,11 +3,13 @@ from gym import spaces
 import numpy as np
 import pandas as pd
 import torch
+import os
 import time
-from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3 import PPO
+from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 
 class PPOEnv(gym.Env):
-    def __init__(self, dataset_path=None, numpy_dataset=None, model=None, distance_metric=None):
+    def __init__(self, dataset_path=None, numpy_dataset=None, model=None, distance_metric=None,label_encoders=None, scaler=None):
         """
         Initialize the PPO environment for counterfactual generation.
         
@@ -23,14 +25,28 @@ class PPOEnv(gym.Env):
         self.dataset_path = dataset_path
         self.numpy_dataset = numpy_dataset
         self.tab_dataset = None
+        self.label_encoders = label_encoders
+        self.scaler = scaler
         
         if dataset_path is not None:
             self.tab_dataset = pd.read_csv(dataset_path)
+            # Drop rows with NaN values
+            original_len = len(self.tab_dataset)
+            self.tab_dataset = self.tab_dataset.dropna()
+            dropped_rows = original_len - len(self.tab_dataset)
+            if dropped_rows > 0:
+                print(f"Dropped {dropped_rows} rows with NaN values ({dropped_rows/original_len:.1%} of dataset)")
         elif numpy_dataset is not None:
             self.tab_dataset = pd.DataFrame(numpy_dataset)
+            # Drop rows with NaN values
+            original_len = len(self.tab_dataset)
+            self.tab_dataset = self.tab_dataset.dropna()
+            dropped_rows = original_len - len(self.tab_dataset)
+            if dropped_rows > 0:
+                print(f"Dropped {dropped_rows} rows with NaN values ({dropped_rows/original_len:.1%} of dataset)")
         
         assert self.tab_dataset is not None, "Dataset must be provided through dataset_path or numpy_dataset"
-        
+        self.feature_order = list(self.tab_dataset.columns[:-1])
         # Store the model
         self.model = model
         assert model is not None, "Classification model must be provided"
@@ -38,17 +54,11 @@ class PPOEnv(gym.Env):
         # Get feature categories
         self.con_columns, self.cat_columns = self.get_con_cat_columns(self.tab_dataset)
         self.cats_ids = self.generate_cats_ids(self.tab_dataset)
-        
-        # KEY FIX 1: Create categorical mapping for proper encoding
-        self.cat_mappings = self._create_categorical_mappings()
-        
-        # Precompute feature ranges for normalization (for continuous features only)
-        self.feature_ranges = self._compute_feature_ranges()
-        
+        self.categorical_indices = [i for i, col in enumerate(self.tab_dataset.columns[:-1]) if col in self.cat_columns]
+                
         # Set distance metric
         if distance_metric is None:
             # Default to custom hybrid distance
-            self.distance = lambda x, y: np.linalg.norm(x - y, ord=2)
             self.distance = self.calculate_distance
         else:
             self.distance = distance_metric
@@ -59,26 +69,28 @@ class PPOEnv(gym.Env):
         self.modified_features = None
         self.original_encoded = None
         self.modified_encoded = None
-        self.sample_distance = None
         self.steps_taken = 0
         
         # Default constraints (which features can be modified)
         self.constraints = [1] * (len(self.tab_dataset.columns) - 1)  # Exclude target variable
-        #self.constraints[10] = 0  # Example: feature at index 10 is fixed
         
+        # For each categorical feature, set constraints to 0
+        for i, feature in enumerate(self.tab_dataset.columns[:-1]):  # Exclude target variable
+            if feature in self.cat_columns:
+                self.constraints[i] = 1          
+
         # Define action space based on features that can be modified
-        self.define_action_space()
-        
-        # Store the action names separately before converting to Discrete space
-        self.action_names = self.action_space.copy()
+        self.action_space = self.define_action_space()
         
         # Convert the list of action names to a proper gym action space
         self.action_space = spaces.Discrete(len(self.action_space))
+        self.action_names = self.define_action_space()
+
         
         # Define observation space
         # Original features + modified features + metadata (steps, distance, etc.)
         feature_dim = len(self.tab_dataset.columns) - 1  # Exclude target variable
-        obs_dim = feature_dim * 2 + 3  # Original + modified + metadata
+        obs_dim = feature_dim * 2 + 4  # Original + modified + metadata
         
         # Set observation space bounds based on feature ranges
         self.observation_space = spaces.Box(
@@ -89,44 +101,9 @@ class PPOEnv(gym.Env):
         )
         
         # Episode settings
-        self.max_steps = 500
-        self.reward_range = (-100, 100)
+        self.max_steps = 100
         self.done = False
 
-    # KEY FIX 1: Create proper categorical mappings for encoding
-    def _create_categorical_mappings(self):
-        """Create proper categorical mappings for encoding."""
-        cat_mappings = {}
-        
-        for idx, n_cats, cat_values in self.cats_ids:
-            column_name = self.tab_dataset.columns[idx]
-            # Create mapping from category value to index
-            cat_mappings[column_name] = {cat_val: i for i, cat_val in enumerate(cat_values)}
-        
-        return cat_mappings
-
-    def _compute_feature_ranges(self):
-        """Precompute feature ranges for efficient distance calculation."""
-        feature_ranges = {}
-        
-        for i, column in enumerate(self.tab_dataset.columns[:-1]):  # Exclude target
-            if column in self.con_columns:
-                # For continuous features, store min and max values
-                min_val = self.tab_dataset[column].min()
-                max_val = self.tab_dataset[column].max()
-                avg_val = self.tab_dataset[column].mean()
-                feature_ranges[i] = {
-                    'type': 'continuous',
-                    'min': min_val,
-                    'max': max_val,
-                    'range': min(avg_val, max_val - min_val) 
-                }
-            else:
-                # For categorical features, just mark as categorical
-                feature_ranges[i] = {'type': 'categorical'}
-        
-        return feature_ranges
-    
     def reset(self):
         """
         Reset the environment for a new episode.
@@ -147,6 +124,26 @@ class PPOEnv(gym.Env):
         # Get the original prediction and store it for later use
         self.original_prediction = self.generate_prediction(self.model, self.original_features)
         
+        # Detect number of output classes (only once)
+        if not hasattr(self, 'model_output_dim'):
+            test_features = self.encode_features(self.original_features)
+            with torch.no_grad():
+                output = self.model(torch.tensor(test_features, dtype=torch.float32).unsqueeze(0))
+            self.model_output_dim = output.shape[-1]
+
+        # Mise à jour dynamique de observation_space
+        if not hasattr(self, '_obs_space_updated'):
+            full_obs_dim = len(self._get_observation())
+            self.observation_space = spaces.Box(
+                low=-np.inf,
+                high=np.inf,
+                shape=(full_obs_dim,),
+                dtype=np.float32
+            )
+            self._obs_space_updated = True
+
+
+
         # Reset tracking variables
         self.steps_taken = 0
         self.done = False
@@ -169,22 +166,16 @@ class PPOEnv(gym.Env):
         """
         # Increment step counter
         self.steps_taken += 1
-
         
         # Apply the selected action to modify features
         self.modified_features = self.apply_action(action)
-        
+
         # Get the new prediction
         modified_prediction = self.generate_prediction(self.model, self.modified_features)
         
         # Calculate distance between original and modified features (using raw features)
         distance = self.calculate_distance(self.original_features, self.modified_features)
-        
-        if self.steps_taken == self.max_steps - 1 :
-            print(f"Original features: {self.original_features}")
-            print(f"Modified features: {self.modified_features}")
-            print(f"Distance: {distance}")
-    
+          
         # Determine if we found a counterfactual (class changed)
         counterfactual_found = (modified_prediction != self.original_prediction)
         
@@ -212,26 +203,28 @@ class PPOEnv(gym.Env):
 
     def _get_observation(self):
         """Create observation vector from current state."""
-        # Add metadata to the observation: steps taken, distance, normalized progress
+        # Distance L1 (déjà optimisé)
         distance = self.calculate_distance(self.original_features, self.modified_features)
         steps_normalized = self.steps_taken / self.max_steps
-        
-        # Store current distance for use in observation
         self.sample_distance = distance
-        
-        # Combine all into observation vector
+
+        # One-hot encoding de la classe originale
+        target_vector = np.zeros(self.model_output_dim, dtype=np.float32)
+        target_vector[self.original_prediction] = 1.0
+
+        # Observation finale
         observation = np.concatenate([
             self.original_encoded,
             self.modified_encoded,
-            [steps_normalized, self.sample_distance, float(self.original_prediction)]
+            [steps_normalized, self.sample_distance],
+            target_vector
         ]).astype(np.float32)
-        
-        # Replace any NaN values with 0
-        observation = np.nan_to_num(observation, nan=0.0)
-        
-        return observation
 
-    def calculate_distance(self, original_features, modified_features):
+        return np.nan_to_num(observation, nan=0.0)
+
+
+
+    def calculate_distance_old(self, original_features, modified_features):
         """Calculate the distance between original and modified features using raw features."""
         """
         Calculate hybrid distance that treats categorical and continuous features differently.
@@ -284,34 +277,37 @@ class PPOEnv(gym.Env):
         # Normalize by number of features to get average distance per feature
         return total_distance
 
-    # KEY FIX 5: Better reward structure
-    def calculate_reward(self, distance, counterfactual_found, stage=1):
+    def calculate_distance(self, original_features, modified_features):
         """
-        Calculate the reward for the current step based on the training stage.
+        Calculate L1 (Manhattan) distance between encoded original and modified features.
+        """
+        dist = 0
+        for i, (o, m) in enumerate(zip(original_features, modified_features)):
+            if i in self.categorical_indices:
+                dist += float(o != m)  # 1 si changé
+            else:
+                dist += abs(o - m)
+        return dist
 
-        The reward function is structured to:
-        1. Highly reward finding a valid counterfactual (Stage 1)
-        2. Provide gradient through probability shifts (Stage 1)
-        3. Penalize for distance from original (Stage 2)
-        4. Penalize for excessive feature modifications (Stage 2)
+
+    def calculate_reward(self, distance, counterfactual_found):
+        """
+        Reward function:
+        - High reward if class changes (counterfactual)
+        - Gradual reward for reducing confidence in original class
+        - Penalize long trajectories and large distances
         """
 
-        # Stage 1: Finding Valid CFEs
         if counterfactual_found:
-            # Higher reward for successful counterfactual
-            base_reward = 100.0
-            distance_reward = 10 / (distance + 1e-3)
-            base_reward += distance_reward
-            return max(base_reward, 10.0)  # Ensure minimum positive reward for success
+            return 100 + 100 / (distance +1e-6)  # High reward for finding a counterfactual, inversely proportional to distance
         else:
-            # If no counterfactual found, less harsh penalty to allow exploration
-            reward = -0.5  # Reduced from -1
-            return reward
+            return -0.5
 
-    # KEY FIX 4: Improved action application with random categorical selection
+
+
     def apply_action(self, action_idx):
         """
-        Apply the selected action to modify features, with improved categorical handling.
+        Apply the selected action to modify features, with stage-specific behaviors.
 
         Parameters:
             action_idx: Index of the action to take
@@ -320,11 +316,12 @@ class PPOEnv(gym.Env):
         Returns:
             modified_features: The features after applying the action
         """
-        # Get the action name from the action names list
-        action_name = self.action_names[action_idx]
-
+        # Get the action name from the action space
+        action_name = self._action_idx_to_name(action_idx)
+        
         # Create a copy of the current features to modify
         modified_features = self.modified_features.copy()
+
         try:
             # Extract feature name from action name
             if '_' in action_name:
@@ -342,37 +339,50 @@ class PPOEnv(gym.Env):
                         # Get current category value (raw value, not encoded)
                         current_value = modified_features[feature_index]
 
-                        # For categorical features, use random selection instead of deterministic cycling
+                        # For categorical features, systematically try different categories
                         available_values = [val for val in cat_values if val != current_value]
 
-                        # Random selection for better exploration
+                        # Select next category in a deterministic way
                         if available_values:
-                            next_value = np.random.choice(available_values)
+                            # Choose next category based on step count for more systematic exploration
+                            next_value = available_values[self.steps_taken % len(available_values)]
                             modified_features[feature_index] = next_value
 
                 # Handle continuous features with adaptive step sizes
                 elif action_type in ['increase', 'decrease']:
                     current_value = modified_features[feature_index]
-                    if current_value != 0:
-                        base_step = abs(current_value) * 0.1  # 10% of current value
-                    else:
-                        # More reasonable step sizes based on feature range
-                        feature_range = self.feature_ranges[feature_index]['range']
-                        base_step = feature_range * 0.1  # 10% of feature range
+
+                    # Adaptive step size based on progress through episode and training stage
+                    progress = self.steps_taken / self.max_steps
+
+                    # Stage-specific step size adjustments
+                    base_step = 0.20  # 20% change for broader exploration
+                    fine_step = 0.10  # 10% change
+
+                    # Adaptive step size: larger at beginning, finer as we progress
+                    step_size = base_step * (1 - progress) + fine_step * progress
 
                     # Apply the step
                     if action_type == 'increase':
                         max_value = self.tab_dataset.iloc[:, feature_index].max()
-                        new_value = min(current_value + base_step, max_value)
+                        calculated_value = current_value * (1 + step_size)
+
+                        # Round if the feature is integer type
+                        if self.tab_dataset.iloc[:, feature_index].dtype in [np.int64, np.int32, int]:
+                            calculated_value = int(calculated_value)
+
+                        new_value = min(calculated_value, max_value)
                         modified_features[feature_index] = new_value
                     else:  # decrease
                         min_value = self.tab_dataset.iloc[:, feature_index].min()
-                        new_value = max(current_value - base_step, min_value)
-                        modified_features[feature_index] = new_value
+                        calculated_value = current_value * (1 - step_size)
 
-                    # Round if the feature is integer type
-                    if self.tab_dataset.iloc[:, feature_index].dtype in [np.int64, np.int32, int]:
-                        modified_features[feature_index] = int(round(modified_features[feature_index]))
+                        # Round if the feature is integer type
+                        if self.tab_dataset.iloc[:, feature_index].dtype in [np.int64, np.int32, int]:
+                            calculated_value = int(calculated_value)
+
+                        new_value = max(calculated_value, min_value)
+                        modified_features[feature_index] = new_value
 
         except Exception as e:
             print(f"Error applying action {action_name}: {e}")
@@ -380,34 +390,34 @@ class PPOEnv(gym.Env):
 
         return modified_features
 
-    # KEY FIX 1: Fixed categorical encoding
+    def _action_idx_to_name(self, action_idx):
+        """Convert action index to action name."""
+        return self.action_names[action_idx]
+
+
     def encode_features(self, features):
-        """Encode features for the model input with proper categorical mapping."""
-        # Create a DataFrame for easier handling
-        features_df = pd.DataFrame([features], columns=self.tab_dataset.columns[:-1])
+        X = np.array(features, dtype=object).reshape(1, -1)  # shape (1, n)
         
-        # Create a copy to avoid modifying the original
-        encoded_features = features_df.copy()
-        
-        # FIXED: Proper categorical encoding using mappings
-        for column_name, mapping in self.cat_mappings.items():
-            if column_name in encoded_features.columns:
-                # Get the current value
-                current_val = encoded_features[column_name].iloc[0]
-                
-                # Map to index, default to 0 if not found
-                encoded_val = mapping.get(current_val, 0)
-                encoded_features[column_name] = encoded_val
-        
-        # Convert to numeric, handle NaNs
-        encoded = encoded_features.astype(float).values.flatten()
-        encoded = np.nan_to_num(encoded, nan=0.0)
-        
-        return encoded
+        if self.label_encoders:
+            for i, col in enumerate(self.feature_order):
+                if col in self.label_encoders:
+                    encoder = self.label_encoders[col]
+                    val = str(X[0, i])
+                    if val in encoder.classes_:
+                        X[0, i] = encoder.transform([val])[0]
+                    else:
+                        X[0, i] = 0  # fallback
+
+        if self.scaler:
+            X = self.scaler.transform(X)
+
+        return X.flatten().astype(np.float32)
+
+
 
     def define_action_space(self, constraints=None):
         # Define the action space based on the features
-        self.action_space = []
+        action_space = []
         if constraints is None:
             constraints = self.constraints  # Use default constraints if not provided
         if constraints is None:
@@ -418,27 +428,28 @@ class PPOEnv(gym.Env):
             if constraints[i] == 0:
                     continue
             if self.tab_dataset[column].dtype == 'O':  # Categorical feature
-                self.action_space.append(f'change_{column}')
+                action_space.append(f'change_{column}')
             else:  # Continuous feature
-                self.action_space.append(f'increase_{column}')
-                self.action_space.append(f'decrease_{column}')
-        print(f"Action space defined : {self.action_space}")
-        return self.action_space
+                action_space.append(f'increase_{column}')
+                action_space.append(f'decrease_{column}')
+                
+        return action_space
 
     def generate_prediction(self, model, features):
-        """Generate a prediction using the provided model."""
         try:
-            # Ensure features are numerical
-            features = self.encode_features(features)
-            # Handle NaN values
-            features = np.nan_to_num(features, nan=0.0)
-            features_tensor = torch.tensor(features, dtype=torch.float32).unsqueeze(0)
+            features_encoded = self.encode_features(features)
+            features_tensor = torch.tensor(features_encoded, dtype=torch.float32).unsqueeze(0)
             with torch.no_grad():
-                prediction = model(features_tensor).argmax(dim=-1).item()
-            return prediction
+                logits = model(features_tensor)
+                probs = torch.softmax(logits, dim=-1).squeeze().numpy()
+                pred_class = np.argmax(probs)
+
+            #print(f"Prediction: {pred_class}, probs: {probs}")
+            return pred_class
         except Exception as e:
             print(f"Error in generate_prediction: {e}")
-            return 0  # Return a default prediction in case of error
+            return 0
+
 
     def get_con_cat_columns(self, x):
         """Identify continuous and categorical columns in the dataset."""
@@ -456,21 +467,28 @@ class PPOEnv(gym.Env):
                 
         return con, cat
 
-    def generate_cats_ids(self, dataset = None, cat = None):
+    def generate_cats_ids(self, dataset=None, cat=None):
         """Generate categorical IDs for encoding."""
         if dataset is None:
-            assert self.tab_dataset is not None, 'If the dataset is not provided\
-            to the function, a csv needs to have been provided when instatiating the class'
+            assert self.tab_dataset is not None, (
+                'If the dataset is not provided to the function, '
+                'a csv needs to have been provided when instantiating the class'
+            )
             dataset = self.tab_dataset
         if cat is None:
-            con, cat = self.get_con_cat_columns(dataset)
+            _, cat = self.get_con_cat_columns(dataset)
+
         cat_ids = []
+        cat_maps = {}
         for index, key in enumerate(dataset):
             if key in set(cat):
-                cat_ids.append((index,
-                                len(pd.unique(dataset[key])),
-                                pd.unique(dataset[key])))
+                unique_vals = pd.unique(dataset[key])
+                cat_ids.append((index, len(unique_vals), unique_vals))
+                cat_maps[key] = {val: i for i, val in enumerate(unique_vals)}
+
+        self.cat_maps = cat_maps  
         return cat_ids
+
 
 
 class PPOMonitorCallback(BaseCallback):
