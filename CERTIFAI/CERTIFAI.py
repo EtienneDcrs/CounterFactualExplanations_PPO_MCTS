@@ -265,7 +265,7 @@ class CERTIFAI:
             
             fixed (list): a list of features to be kept fixed in counterfactual generation 
             (i.e. all counterfactual will have the same value as the given sample for that
-             feature). If no list is provided, then no feature will be kept fixed 
+            feature). If no list is provided, then no feature will be kept fixed 
             
             Outputs:
                 None, an attribute 'constraints' is created for the class, where
@@ -374,7 +374,7 @@ class CERTIFAI:
         if classification:
             if pytorch:
                 with torch.no_grad():
-                    prediction = np.argmax(model(model_input).numpy(), axis = -1)
+                    prediction = np.argmax(model(model_input, apply_softmax=True).numpy(), axis = -1)
             else:
                 prediction = np.argmax(model.predict(model_input), axis = -1)
                 
@@ -807,15 +807,16 @@ class CERTIFAI:
                 self.set_distance(distance, x)
                 
         if model_input is None:
-            model_input = self.transform_x_2_input(x, pytorch = pytorch)
+            # Exclude the last column (target) from the input
+            model_input = self.transform_x_2_input(x.iloc[:, :-1], pytorch=pytorch)
             
         if torch:
             model.eval()
         
         if self.predictions is None: 
             self.predictions = self.generate_prediction(model, model_input,
-                                                  pytorch = pytorch,
-                                                  classification = classification)
+                                                  pytorch=pytorch,
+                                                  classification=classification)
         
         if len(x.shape)>2:
             
@@ -881,7 +882,7 @@ class CERTIFAI:
                 crossed_generation = self.crossover(mutated_generation, 
                                                     return_df = True)
                 
-                gen_input = self.transform_x_2_input(crossed_generation,
+                gen_input = self.transform_x_2_input(crossed_generation.iloc[:, :-1],
                                                      pytorch = pytorch)
                 
                 counter_preds = self.generate_prediction(model,
@@ -889,7 +890,7 @@ class CERTIFAI:
                                                          pytorch,
                                                          classification)
                 
-                diff_prediction = [counter_pred!=self.predictions[g] for
+                diff_prediction = [counter_pred!=self.predictions[i] for
                                    counter_pred in counter_preds]
                 
                 final_generation = crossed_generation.loc[diff_prediction]

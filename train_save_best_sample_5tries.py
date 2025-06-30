@@ -1,4 +1,5 @@
 import os
+import pickle
 import time
 import torch
 import numpy as np
@@ -7,9 +8,10 @@ from stable_baselines3 import PPO,A2C
 from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 from tqdm import tqdm
+from closest_samples import get_closest_samples
 
 from PPO_env import PPOEnv, PPOMonitorCallback
-from Classifier_model import Classifier, train_model, load_classifier_with_preprocessing, test_model_accuracy
+from Classifier_model import Classifier, evaluate_model_on_full_dataset, train_model
 from PPO_MCTS import PPOMCTS
 from KPIs import proximity_KPI, sparsity_KPI
 import warnings
@@ -50,17 +52,69 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
     os.makedirs(save_dir, exist_ok=True)
     os.makedirs('data', exist_ok=True)
     
-    classifier, label_encoders, scaler = load_classifier_with_preprocessing(dataset_path, model_path)
-
-    # Test with default 20% test split
-    accuracy, predictions, true_labels = test_model_accuracy(classifier, dataset_path, label_encoders, test_split=1)
-    print(f"Classifier accuracy on test set: {accuracy:.2f}")
-
-
-    # Create the PPO environment
-    env = PPOEnv(dataset_path=dataset_path, model=classifier)
-    eval_env = PPOEnv(dataset_path=dataset_path, model=classifier)
+    # Determine the output size based on the dataset
+    out = None
+    if dataset_path.endswith('.csv'):
+        # Load the dataset to determine the number of classes
+        dataset = pd.read_csv(dataset_path)
+        out = len(dataset.iloc[:, -1].unique())
+    else:
+        # Default case - try to determine from the dataset
+        dataset = pd.read_csv(dataset_path)
+        out = len(dataset.iloc[:, -1].unique())
     
+    # Load or train the classifier model
+    if model_path is None:
+        model_path = f"{os.path.splitext(os.path.basename(dataset_path))[0]}_model.pt"
+        model_path = os.path.join("classification_models", model_path)
+    # Check if the classifier model exists, otherwise exit
+
+    if not os.path.exists(model_path):
+        print(f"Classifier model not found at {model_path}. Training a new one.")
+        train_model(dataset_path, model_path)
+
+    print(f"Loading classifier model from {model_path}")
+    # Load dataset to determine input features
+    dataset = pd.read_csv(dataset_path)
+    in_feats = len(dataset.columns) - 1  # Exclude target variable
+    
+    # Load the classifier model with matching architecture
+    classifier = Classifier(
+        in_feats=in_feats, 
+        out=out,
+        h_size=128,      # Match training parameters
+        n_layers=4,      # Match training parameters
+        dropout=0.3,
+        lr=0.001,
+        weight_decay=1e-4
+    )
+    classifier.load_state_dict(torch.load(model_path))
+    classifier.eval()  # Set to evaluation mode
+
+    accuracy = evaluate_model_on_full_dataset(classifier, dataset_path)
+    print(f"Classifier accuracy on full dataset: {accuracy:.2f}")
+
+    encoders_path = model_path.replace('.pt', '_encoders.pkl')
+    scaler_path = model_path.replace('.pt', '_scaler.pkl')
+
+    label_encoders, scaler = None, None
+    try:
+        with open(encoders_path, 'rb') as f:
+            label_encoders = pickle.load(f)
+            print(f"Label encoders loaded from {encoders_path}")
+    except Exception as e:
+        print(f"Failed to load label encoders: {e}")
+
+    try:
+        with open(scaler_path, 'rb') as f:
+            scaler = pickle.load(f)
+            print(f"Scaler loaded from {scaler_path}")
+    except Exception as e:
+        print(f"Failed to load scaler: {e}")
+    
+    env = PPOEnv(dataset_path=dataset_path, model=classifier, label_encoders=label_encoders, scaler=scaler)
+    eval_env = PPOEnv(dataset_path=dataset_path, model=classifier, label_encoders=label_encoders, scaler=scaler)
+
     # Define PPO model path
     ppo_model_path = os.path.join(save_dir, f"ppo_certifai_final_{os.path.basename(dataset_path)}.zip")
     
@@ -91,15 +145,15 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
         model = PPO(
             policy="MlpPolicy",
             env=env,
-            learning_rate=3e-4,
+            learning_rate=1e-4,
             n_steps=2048,
-            batch_size=64,
+            batch_size=128,
             n_epochs=10,
             gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.2,
             clip_range_vf=None,
-            ent_coef=0.01,
+            ent_coef=0.05,
             vf_coef=0.5,
             max_grad_norm=0.5,
             use_sde=False,
@@ -141,9 +195,9 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
     print(f"Final model saved to {ppo_model_path}")
     
     # Evaluate the trained policy
-    # print("Evaluating the trained policy...")
-    # mean_reward, std_reward = evaluate_policy(model, eval_env, n_eval_episodes=50)
-    # print(f"Mean reward: {mean_reward:.2f} +/- {std_reward:.2f}")
+    print("Evaluating the trained policy...")
+    mean_reward, std_reward = evaluate_policy(model, eval_env, n_eval_episodes=50)
+    print(f"Mean reward: {mean_reward:.2f} +/- {std_reward:.2f}")
     
     return model, env
 
@@ -224,69 +278,86 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
     counterfactuals = []
     original_samples = []
     counterfactual_samples = []
-    feature_columns = original_data.columns[:-1].tolist()  # Exclude target column
+    feature_columns = original_data.columns[:-1].tolist()
     
     success_count = 0
     total_steps = 0
     start_time = time.time()
     
     for i, idx in tqdm(enumerate(indices_to_use), total=num_samples, desc="Generating counterfactuals"):
-        # Reset environment with specific index
-        obs = env.reset()
+        # Initialize for the sample
         env.current_instance_idx = idx
-        env.original_features = env.tab_dataset.iloc[env.current_instance_idx].values[:-1]
-        env.modified_features = env.original_features.copy()
-        env.original_prediction = env.generate_prediction(env.model, env.original_features)
-        obs = env._get_observation()
-        
-        done = False
-        steps = 0
-        
+        obs = env.reset()
         original_features = env.original_features
         original_prediction = env.original_prediction
         current_idx = env.current_instance_idx
+        tries = 0
+        max_tries = 5
+        cfe_candidates = []  # Store all successful CFEs
+        total_steps_for_sample = 0
         
-        while not done and steps < max_steps_per_sample :
-            if use_mcts:
-                # Use MCTS to select action
-                action = mcts.run_mcts(root_state=obs, temperature=0.5)
-            else:
-                # Use standard PPO policy directly
-                action, _ = ppo_model.predict(obs, deterministic=True)
-                
-            obs, reward, done, info = env.step(action)
-            steps += 1
+        
+        # Run exactly 5 tries
+        for try_num in range(max_tries):
+            # Reset environment for each try
+            obs = env.reset()
+            done = False
+            steps = 0
             
-            # If a counterfactual is found, record it if it's better than previous ones
-            if info['counterfactual_found']:
-                success_count += 1
-                total_steps += steps
+            
+            while not done and steps < max_steps_per_sample:
+                if use_mcts:
+                    action = mcts.run_mcts(root_state=obs, temperature=0.5)
+                else:
+                    action, _ = ppo_model.predict(obs, deterministic=True)
                 
-                # Add to counterfactual list (detailed info with metadata)
-                counterfactuals.append({
-                    'sample_id': i,
-                    'data_index': current_idx,
-                    'original_features': original_features,
-                    'counterfactual_features': info['modified_features'],
-                    'original_prediction': original_prediction,
-                    'counterfactual_prediction': info['modified_prediction'],
-                    'distance': info['distance'],
-                    'steps': steps
-                })
+                obs, reward, done, info = env.step(action)
+                steps += 1
+                total_steps_for_sample += 1
                 
-                # Add to dataframes for KPI calculation
-                original_samples.append(original_features)
-                counterfactual_samples.append(info['modified_features'])
-                
-                break
-              
-        # Save intermediate results if batch_size is specified
+                if info['counterfactual_found']:
+                    cfe_candidates.append({
+                        'info': info,
+                        'steps': steps,
+                        'distance': info['distance']
+                    })
+                    break
+    
+        # Select the best CFE (minimum distance) or handle failure
+        if cfe_candidates:
+            success_count += 1
+            # Choose CFE with minimum distance
+            best_cfe = min(cfe_candidates, key=lambda x: x['distance'])
+            best_info = best_cfe['info']
+            steps_taken = best_cfe['steps']
+        else:
+            best_info = info  # Use last try's info if no CFE found
+            steps_taken = max_steps_per_sample
+        
+        # Store the result
+        counterfactuals.append({
+            'sample_id': i,
+            'data_index': current_idx,
+            'original_features': original_features,
+            'counterfactual_features': best_info['modified_features'] if cfe_candidates else None,
+            'original_prediction': original_prediction,
+            'counterfactual_prediction': best_info['modified_prediction'] if cfe_candidates else original_prediction,
+            'distance': best_cfe['distance'] if cfe_candidates else float('inf'),
+            'steps': total_steps_for_sample,
+            'tries': max_tries,
+            'success': bool(cfe_candidates),
+            'successful_tries': len(cfe_candidates)
+        })
+        original_samples.append(original_features)
+        counterfactual_samples.append(best_info['modified_features'] if cfe_candidates else original_features)
+        
+        total_steps += total_steps_for_sample
+        
         if batch_size and (i + 1) % batch_size == 0:
             intermediate_save_path = f"{os.path.splitext(save_path)[0]}_batch_{(i+1)//batch_size}.csv"
             _save_counterfactuals(counterfactuals, original_data, intermediate_save_path)
             print(f"Saved intermediate results to {intermediate_save_path}")
     
-    # Create dataframes for KPI calculation
     original_df = pd.DataFrame(original_samples, columns=feature_columns)
     counterfactual_df = pd.DataFrame(counterfactual_samples, columns=feature_columns)
     
@@ -370,15 +441,15 @@ def _save_counterfactuals(counterfactuals, original_data, save_path):
   
     return counterfactuals
 
-TOTAL_TIMESTEPS = 50000  # Total timesteps for training
+TOTAL_TIMESTEPS = 0000  # Total timesteps for training
 
 def main():
     # Specify the dataset path
-    dataset_path = 'data/drug200.csv'
-    dataset_path = 'data/adult.csv'
-    dataset_path = 'data/bank.csv'
-    dataset_path = 'data/breast_cancer.csv'
+    #dataset_path = 'data/drug200.csv'
     dataset_path = 'data/diabetes.csv'
+    dataset_path = 'data/breast_cancer.csv'
+    dataset_path = 'data/bank.csv'
+    dataset_path = 'data/adult.csv'
     
     # Create logs and model directories
     logs_dir = 'ppo_logs'
@@ -386,7 +457,7 @@ def main():
     os.makedirs('data', exist_ok=True)
     
     # Define whether to continue training an existing model
-    continue_training = False
+    continue_training = True
     
 
     # Train the PPO model (will load and continue if it exists)
@@ -402,13 +473,7 @@ def main():
     if ppo_model is not None:
                 
         # take the first 100 samples from the dataset
-        # Take 50 samples from each class in the dataset
-        df = pd.read_csv(dataset_path)
-        target_col = df.columns[-1]
-        indices_to_use = []
-        for cls in df[target_col].unique():
-            cls_indices = df[df[target_col] == cls].index[:50].tolist()
-            indices_to_use.extend(cls_indices)
+        indices_to_use = list(range(100))
 
         # Generate counterfactuals - with standard PPO
         print("Generating counterfactuals using standard PPO...")
@@ -423,18 +488,6 @@ def main():
         )
 
 
-        # Generate counterfactuals - with MCTS
-        print("Generating counterfactuals using MCTS...")
-        counterfactuals_mcts, _, _ = generate_counterfactuals(
-            ppo_model=ppo_model,
-            env=env,
-            dataset_path=dataset_path,
-            save_path=f'data/generated_counterfactuals_mcts_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv',
-            max_steps_per_sample=100,
-            use_mcts=True,
-            mcts_simulations=15,  # Adjust simulations as needed
-            specific_indices=indices_to_use
-        )
 
-if __name__ == "__main__":
-    main()
+import cProfile
+cProfile.run('main()', 'output.prof')

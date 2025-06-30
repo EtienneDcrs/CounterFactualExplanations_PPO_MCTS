@@ -1,50 +1,101 @@
 age,workclass,fnlwgt,education,education-num,marital-status,occupation,relationship,race,sex,capital-gain,capital-loss,hours-per-week,native-country
-58, Federal-gov,76207, Doctorate,9, Married-AF-spouse, Farming-fishing, Not-in-family, Black, Male,2581,60,23, India
-40, Local-gov,83547, Assoc-acdm,12, Married-civ-spouse, Other-service, Unmarried, Black, Female,235,888,79, India
-33, Self-emp-not-inc,215610, 7th-8th,12, Never-married, Exec-managerial, Unmarried, Amer-Indian-Eskimo, Female,1224,437,29, South
-48, Private,235398, Masters,8, Separated, Other-service, Not-in-family, Asian-Pac-Islander, Male,1281,1384,47,nan
-41, Private,338582, Masters,13, Married-AF-spouse, Adm-clerical, Own-child, Amer-Indian-Eskimo, Female,953,1148,34, United-States
-43, Federal-gov,284541, Assoc-acdm,12, Divorced,nan, Wife, Asian-Pac-Islander, Male,1783,467,17, Cuba
-30, State-gov,159736, Assoc-acdm,11, Separated, Adm-clerical, Wife, Asian-Pac-Islander, Female,1291,617,41, United-States
-31, Federal-gov,210149, Some-college,14, Married-spouse-absent, Sales, Unmarried, White, Female,1806,1232,54, India
-38, Private,46064, 11th,10, Separated, Handlers-cleaners, Not-in-family, Black, Female,13436,1467,29, Mexico
-23,nan,158846, HS-grad,14, Separated, Exec-managerial, Not-in-family, Black, Male,5353,257,64, Cuba
-52, State-gov,278734, 7th-8th,9, Married-civ-spouse, Adm-clerical, Wife, White, Male,397,910,61, India
-48, Private,142389, Doctorate,4, Married-spouse-absent, Sales, Wife, Black, Female,186,737,61, United-States
-24, Federal-gov,122118, HS-grad,16, Married-civ-spouse, Other-service, Not-in-family, Asian-Pac-Islander, Female,1309,259,41, South
-40, Federal-gov,206293, Assoc-voc,11, Married-spouse-absent, Sales, Unmarried, Amer-Indian-Eskimo, Male,129,251,57, Cuba
-52,nan,125117, Bachelors,11, Separated, Transport-moving, Own-child, White, Male,1032,249,62, India
-42, Private,245358, Some-college,16, Never-married, Prof-specialty, Unmarried, Black, Female,1855,766,23,nan
-29, State-gov,175708, HS-grad,13, Separated, Machine-op-inspct, Husband, Asian-Pac-Islander, Female,665,253,72, Cuba
-58, Federal-gov,187076, Assoc-acdm,13, Separated, Adm-clerical, Husband, Amer-Indian-Eskimo, Female,131,1402,47, South
-23, State-gov,29925, HS-grad,7, Married-spouse-absent, Handlers-cleaners, Unmarried, Asian-Pac-Islander, Female,1927,1157,40, United-States
-20,nan,293466, Some-college,13, Married-spouse-absent, Prof-specialty, Not-in-family, Amer-Indian-Eskimo, Female,1740,80,74,nan
-48, Local-gov,194532, Assoc-voc,13, Separated, Adm-clerical, Not-in-family, White, Male,0,1912,72, United-States
-53, Private,302263, 11th,6, Married-civ-spouse, Adm-clerical, Unmarried, Amer-Indian-Eskimo, Male,342,326,37, India
-20,nan,77333, 11th,5, Married-AF-spouse, Craft-repair, Not-in-family, Amer-Indian-Eskimo, Female,472,517,73, Jamaica
-49, Self-emp-not-inc,117262, Assoc-voc,14, Separated, Other-service, Not-in-family, Amer-Indian-Eskimo, Male,154,46,51, Jamaica
-41, Local-gov,107566, 7th-8th,15, Never-married, Transport-moving, Unmarried, Black, Female,1422,164,44, Mexico
-47, State-gov,217910, Doctorate,15, Never-married, Transport-moving, Own-child, Black, Female,509,358,71, India
-51, Self-emp-not-inc,169178, 7th-8th,11, Married-civ-spouse, Prof-specialty, Not-in-family, Black, Female,1018,895,17, Mexico
-35,nan,179203, HS-grad,15, Married-spouse-absent, Transport-moving, Own-child, Amer-Indian-Eskimo, Male,61,424,57,nan
-22, State-gov,365950, Some-college,7, Married-AF-spouse, Farming-fishing, Own-child, Asian-Pac-Islander, Male,2079,86,40, India
-51, Private,194015, Bachelors,8, Married-spouse-absent, Prof-specialty, Own-child, White, Female,548,189,29, South
-52,nan,191644, Doctorate,11, Divorced, Machine-op-inspct, Unmarried, Amer-Indian-Eskimo, Female,1049,84,16, Puerto-Rico
-28, State-gov,266631, Some-college,10, Married-spouse-absent, Adm-clerical, Not-in-family, Asian-Pac-Islander, Male,324,853,40, India
-46, Private,386759, Some-college,14, Married-spouse-absent, Tech-support, Unmarried, Amer-Indian-Eskimo, Female,1017,1182,35, Jamaica
-22, Self-emp-not-inc,61394, Masters,6, Married-civ-spouse, Other-service, Not-in-family, Amer-Indian-Eskimo, Female,602,928,50, South
-45, Federal-gov,310330, 11th,12, Married-AF-spouse, Transport-moving, Husband, Amer-Indian-Eskimo, Male,686,236,75, South
-38, Federal-gov,240862, 11th,9, Married-spouse-absent, Machine-op-inspct, Own-child, Asian-Pac-Islander, Male,1058,300,43,nan
-43, Federal-gov,197486, Bachelors,5, Divorced, Farming-fishing, Own-child, Black, Female,568,422,13, Cuba
-56, State-gov,541846, Assoc-voc,12, Married-civ-spouse, Transport-moving, Husband, White, Female,528,576,18, Jamaica
-46, Private,83382, 9th,12, Divorced, Craft-repair, Not-in-family, Amer-Indian-Eskimo, Male,453,48,21, Mexico
-38, State-gov,264749, Bachelors,9, Married-civ-spouse, Other-service, Own-child, Black, Female,2093,318,74, Puerto-Rico
-27, State-gov,508650, 11th,15, Separated, Farming-fishing, Own-child, Black, Male,2462,168,57, United-States
-44, Local-gov,91242, Doctorate,11, Married-AF-spouse, Tech-support, Husband, Black, Female,707,267,74, Cuba
-47, State-gov,173239, Assoc-voc,9, Divorced, Other-service, Wife, White, Female,161,487,27, Puerto-Rico
-31, Private,93959, 9th,13, Separated, Prof-specialty, Own-child, Asian-Pac-Islander, Male,3422,511,70, Cuba
-52, Local-gov,289792, Masters,4, Never-married, Transport-moving, Own-child, Asian-Pac-Islander, Female,138,1771,25, Puerto-Rico
-37, Private,337641, 7th-8th,10, Divorced, Adm-clerical, Unmarried, Asian-Pac-Islander, Male,894,1510,40, Puerto-Rico
-51, Private,143565, Assoc-acdm,9, Divorced, Other-service, Not-in-family, Asian-Pac-Islander, Female,49,189,69, India
-52, Local-gov,127636, 11th,10, Divorced, Transport-moving, Husband, White, Male,294,334,19, India
-57, Private,101113, HS-grad,9, Separated, Protective-serv, Own-child, Amer-Indian-Eskimo, Male,1336,1605,31, South
+31, Local-gov,75936, Prof-school,13, Married-AF-spouse, Prof-specialty, Own-child, Black, Female,3291,33,2, Mexico
+75,nan,83167, Some-college,4, Never-married, Other-service, Not-in-family, White, Female,515,1269,57, Jamaica
+71, Self-emp-inc,216743, 11th,7, Married-AF-spouse, Prof-specialty, Not-in-family, Black, Female,428,1380,22, Mexico
+34, Private,232219, Prof-school,4, Married-civ-spouse, Machine-op-inspct, Own-child, Asian-Pac-Islander, Female,20,1035,43, Jamaica
+41, Federal-gov,339548, 11th,4, Divorced, Exec-managerial, Unmarried, Black, Male,593,1257,28, Honduras
+73, Local-gov,284668, Bachelors,9, Married-civ-spouse,nan, Wife, Amer-Indian-Eskimo, Female,50,378,44, Mexico
+47, Local-gov,159354, 10th,15, Married-spouse-absent, Sales, Husband, Amer-Indian-Eskimo, Female,680,547,49, Puerto-Rico
+45, State-gov,207430, Assoc-acdm,15, Married-civ-spouse, Handlers-cleaners, Other-relative, Asian-Pac-Islander, Female,190,703,28,nan
+66,nan,46577, Bachelors,10, Married-civ-spouse, Craft-repair, Own-child, Black, Male,14244,792,13, Jamaica
+38, Federal-gov,159521, Some-college,12, Married-civ-spouse, Exec-managerial, Not-in-family, Black, Female,3748,59,15, Jamaica
+50, Local-gov,279448, 9th,7, Never-married, Farming-fishing, Not-in-family, White, Male,1051,234,38, India
+72,nan,141136, Prof-school,13, Never-married, Prof-specialty, Not-in-family, Other, Female,300,1028,15, Honduras
+64, State-gov,123045, 11th,8, Never-married, Prof-specialty, Not-in-family, Black, Female,2775,450,25, Mexico
+74, Local-gov,205019, Some-college,8, Separated, Handlers-cleaners, Own-child, Black, Male,1032,1321,80, United-States
+60, Federal-gov,121686, Assoc-voc,11, Married-civ-spouse, Sales, Own-child, Asian-Pac-Islander, Male,1188,414,45, England
+65, Self-emp-inc,246519, 11th,13, Married-spouse-absent, Protective-serv, Not-in-family, Amer-Indian-Eskimo, Female,1037,763,7,nan
+63, State-gov,177362, Some-college,12, Married-AF-spouse, Exec-managerial, Husband, Amer-Indian-Eskimo, Male,471,854,68, South
+36, Private,186936, 5th-6th,3, Married-spouse-absent, Exec-managerial, Not-in-family, Amer-Indian-Eskimo, Female,1407,817,5, Honduras
+21, State-gov,31771, Masters,3, Married-civ-spouse, Adm-clerical, Other-relative, Other, Female,2531,454,6, Cuba
+42, Private,291785, 5th-6th,6, Never-married, Sales, Other-relative, White, Female,572,1952,22, South
+34, Federal-gov,194047, 10th,13, Divorced, Prof-specialty, Wife, Black, Female,1788,484,35, South
+33, State-gov,300268, Assoc-voc,7, Married-spouse-absent, Exec-managerial, Husband, Other, Male,1452,244,34,nan
+19, Self-emp-inc,77767, HS-grad,12, Married-AF-spouse, Protective-serv, Unmarried, Amer-Indian-Eskimo, Female,962,1140,65, South
+36, Private,116504, Masters,13, Married-AF-spouse, Prof-specialty, Unmarried, White, Male,897,1070,55, India
+48, Self-emp-not-inc,111068, HS-grad,12, Married-spouse-absent, Handlers-cleaners, Husband, Other, Male,85,286,59, South
+66, Federal-gov,216179, 11th,15, Divorced, Farming-fishing, Husband, Amer-Indian-Eskimo, Female,419,204,74, India
+33, Local-gov,168175, Doctorate,8, Never-married, Prof-specialty, Wife, White, Male,422,1469,56, Jamaica
+67, Self-emp-not-inc,180257, Bachelors,9, Separated, Transport-moving, Unmarried, White, Male,266,769,23, Mexico
+47, Self-emp-not-inc,367344, Assoc-acdm,4, Never-married, Protective-serv, Husband, Amer-Indian-Eskimo, Female,391,1759,44, Mexico
+45, State-gov,192607, Bachelors,6, Married-AF-spouse, Prof-specialty, Other-relative, Other, Female,1609,1097,52,nan
+31, Self-emp-not-inc,189975, Doctorate,6, Divorced, Adm-clerical, Unmarried, Black, Female,83,1066,17, Puerto-Rico
+55,nan,265792, Assoc-acdm,5, Never-married, Other-service, Own-child, Black, Female,647,1531,50, United-States
+25, Federal-gov,387846, Some-college,3, Married-spouse-absent, Handlers-cleaners, Wife, Black, Male,1416,460,62, Puerto-Rico
+23, Private,59969, Some-college,4, Married-civ-spouse, Handlers-cleaners, Other-relative, White, Male,297,1431,34, South
+39, State-gov,311678, HS-grad,7, Married-civ-spouse, Handlers-cleaners, Wife, Black, Male,196,905,41, Cuba
+64, Self-emp-not-inc,241821, 9th,12, Never-married, Handlers-cleaners, Husband, Other, Female,1371,350,63, Puerto-Rico
+23, Federal-gov,197349, HS-grad,8, Never-married, Protective-serv, Not-in-family, White, Male,10,1592,76, Jamaica
+22, Private,542661, Some-college,14, Separated,nan, Husband, Asian-Pac-Islander, Male,1125,1143,41, Jamaica
+67, Self-emp-not-inc,84585, Masters,9, Divorced, Other-service, Wife, Black, Female,145,340,27, United-States
+56, Federal-gov,264984, 11th,7, Separated, Prof-specialty, Wife, Other, Female,1224,6,40, South
+76, Local-gov,508640, Some-college,3, Married-civ-spouse, Farming-fishing, Not-in-family, Amer-Indian-Eskimo, Male,2306,82,48, Cuba
+54, Self-emp-not-inc,87241, Some-college,8, Married-AF-spouse, Transport-moving, Own-child, Amer-Indian-Eskimo, Male,1100,568,11, Cuba
+42,nan,173727, 5th-6th,12, Married-AF-spouse, Craft-repair, Husband, Other, Male,78,120,55,nan
+77, Federal-gov,94282, Assoc-acdm,14, Married-spouse-absent, Tech-support, Unmarried, White, Female,1557,90,46, India
+35,nan,289402, 10th,10, Married-civ-spouse, Tech-support, Wife, Black, Female,647,192,29, Puerto-Rico
+25, Local-gov,338265, Masters,5, Married-civ-spouse, Other-service, Other-relative, Black, Male,484,30,61, United-States
+58, Private,144454, Doctorate,3, Separated,nan, Own-child, Asian-Pac-Islander, Male,1421,215,16, Cuba
+52, State-gov,129025, 10th,13, Married-AF-spouse, Craft-repair, Own-child, White, Male,299,93,70, United-States
+32,nan,101706, 10th,8, Separated, Craft-repair, Other-relative, Black, Male,2589,964,25, India
+19, State-gov,270172, Doctorate,6, Separated, Machine-op-inspct, Other-relative, Black, Male,0,1526,42, United-States
+30, Federal-gov,34260, 10th,6, Separated, Transport-moving, Husband, Black, Male,435,190,37, Cuba
+44, Self-emp-not-inc,226790, 9th,10, Never-married, Sales, Husband, Black, Male,1225,361,5, India
+38, Private,52787, 9th,16, Separated, Exec-managerial, Wife, Asian-Pac-Islander, Female,1488,1249,60, England
+66, Self-emp-not-inc,252087, Bachelors,4, Never-married, Protective-serv, Husband, Black, Male,2498,605,63, Honduras
+66, Self-emp-inc,107986, 10th,16, Divorced, Sales, Own-child, Asian-Pac-Islander, Male,350,363,65, Mexico
+28, Private,237088, 11th,8, Married-spouse-absent, Transport-moving, Wife, Other, Male,1228,349,37,nan
+77,nan,218328, Assoc-acdm,13, Never-married, Exec-managerial, Husband, White, Male,166,265,32,nan
+33, Self-emp-inc,56172, Some-college,16, Never-married, Transport-moving, Not-in-family, Asian-Pac-Islander, Male,842,538,34, United-States
+26, Private,145354, HS-grad,4, Never-married, Machine-op-inspct, Wife, Black, Male,169,51,22, India
+66, Federal-gov,187795, 7th-8th,7, Married-civ-spouse, Transport-moving, Husband, Amer-Indian-Eskimo, Male,4385,226,77, United-States
+36, Federal-gov,59401, Prof-school,3, Married-spouse-absent, Tech-support, Unmarried, Black, Male,1750,1901,26, Honduras
+53, Self-emp-inc,293616, Bachelors,11, Married-civ-spouse, Protective-serv, Not-in-family, Other, Female,21,507,22, Mexico
+29, Private,148534, Assoc-acdm,8, Married-AF-spouse, Protective-serv, Not-in-family, White, Female,59,342,36, Honduras
+69, Local-gov,117621, Masters,9, Never-married, Prof-specialty, Wife, White, Male,1045,380,31, Mexico
+58, Local-gov,104753, HS-grad,15, Never-married, Other-service, Wife, Asian-Pac-Islander, Male,859,1050,38, United-States
+73, Federal-gov,156799, 5th-6th,5, Separated, Adm-clerical, Unmarried, Asian-Pac-Islander, Male,350,414,48, Mexico
+53, Local-gov,183256, 9th,4, Divorced,nan, Husband, Other, Female,923,1252,29, Cuba
+61, Self-emp-inc,169975, 5th-6th,10, Married-civ-spouse, Other-service, Own-child, White, Male,720,483,12, England
+26, Self-emp-not-inc,191380, Doctorate,9, Separated, Handlers-cleaners, Unmarried, White, Male,791,1186,37, Cuba
+57, Private,199012, 5th-6th,9, Separated, Transport-moving, Not-in-family, Other, Male,232,521,43, Mexico
+46, State-gov,101181, Doctorate,7, Married-spouse-absent, Transport-moving, Not-in-family, Amer-Indian-Eskimo, Female,331,409,17, Jamaica
+25, Self-emp-not-inc,312029, Doctorate,13, Separated, Transport-moving, Husband, Other, Female,335,13,77, Honduras
+31, Federal-gov,161826, Masters,11, Married-AF-spouse, Transport-moving, Wife, Asian-Pac-Islander, Female,1238,472,19, South
+69, Federal-gov,211637, HS-grad,16, Divorced, Adm-clerical, Other-relative, Amer-Indian-Eskimo, Female,143,1239,39, England
+77, Private,126131, Masters,10, Separated, Handlers-cleaners, Wife, Black, Female,1169,230,64, Puerto-Rico
+69, Local-gov,215378, 5th-6th,4, Separated, Other-service, Unmarried, Asian-Pac-Islander, Female,607,16,8, Cuba
+64, State-gov,30603, Prof-school,15, Separated, Sales, Own-child, White, Male,411,237,67, South
+20, Federal-gov,212463, Assoc-acdm,16, Never-married, Exec-managerial, Husband, Amer-Indian-Eskimo, Female,122,746,28, India
+22, Federal-gov,309159, 10th,7, Married-spouse-absent,nan, Wife, Amer-Indian-Eskimo, Male,149,68,39, United-States
+20, State-gov,125728, Doctorate,13, Never-married, Sales, Wife, Black, Male,96,1632,30, Cuba
+77, Federal-gov,445731, 5th-6th,7, Married-civ-spouse, Tech-support, Unmarried, White, Male,480,1295,16, South
+40, Self-emp-not-inc,276420, Assoc-voc,10, Separated, Other-service, Wife, Black, Female,1534,508,22, England
+30, Private,52241, 9th,9, Never-married, Protective-serv, Other-relative, White, Female,245,259,52, Cuba
+75, State-gov,159309, Masters,7, Never-married, Prof-specialty, Unmarried, Other, Male,69,968,54, Cuba
+59, State-gov,342359, 11th,7, Divorced, Sales, Not-in-family, Other, Female,14132,113,25, England
+61, Self-emp-inc,345946, 11th,14, Never-married, Sales, Not-in-family, Asian-Pac-Islander, Female,591,70,57, South
+62, Self-emp-not-inc,268257, 9th,5, Separated, Protective-serv, Other-relative, Asian-Pac-Islander, Female,1023,1455,17, Jamaica
+53, Self-emp-not-inc,203859, 10th,6, Divorced, Transport-moving, Not-in-family, Black, Male,213,996,54, India
+46, Local-gov,57245, 7th-8th,5, Married-spouse-absent, Other-service, Not-in-family, Amer-Indian-Eskimo, Female,401,569,28, Puerto-Rico
+34, Local-gov,412000, Masters,9, Divorced, Machine-op-inspct, Own-child, Black, Male,885,999,66,nan
+62, Local-gov,249583, 5th-6th,5, Divorced, Sales, Husband, Black, Male,425,1575,24,nan
+67, Federal-gov,284582, 5th-6th,10, Divorced, Tech-support, Own-child, Other, Female,702,413,33, England
+61, Private,215089, Masters,15, Married-spouse-absent, Transport-moving, Own-child, Other, Male,269,644,62,nan
+50, Local-gov,115775, 10th,5, Married-AF-spouse, Exec-managerial, Unmarried, Black, Female,783,1805,62, South
+52, Self-emp-not-inc,227715, Masters,16, Divorced, Machine-op-inspct, Own-child, Amer-Indian-Eskimo, Male,239,1765,58, Jamaica
+20, Private,116359, Prof-school,6, Married-civ-spouse, Other-service, Other-relative, Amer-Indian-Eskimo, Female,894,181,70,nan
+51, Self-emp-inc,189489, HS-grad,4, Separated, Sales, Not-in-family, White, Female,444,1002,49, South
+74, Local-gov,200723, 7th-8th,15, Never-married, Tech-support, Not-in-family, Other, Female,211,461,47, United-States
+49, Private,171277, HS-grad,12, Separated, Transport-moving, Husband, Black, Female,254,1318,40, South
+42, Local-gov,250541, Prof-school,14, Married-AF-spouse, Sales, Not-in-family, Black, Male,1078,162,13, Jamaica

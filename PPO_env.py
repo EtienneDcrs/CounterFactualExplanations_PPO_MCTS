@@ -153,10 +153,10 @@ class PPOEnv(gym.Env):
 
     def step(self, action):
         """
-        Execute one step in the environment.
+        Execute one step in the environment with dynamic action randomization based on steps taken.
         
         Parameters:
-            action: Index of the action to take
+            action: Index of the action to take (may be overridden with random selection)
         
         Returns:
             observation: Next state observation
@@ -166,17 +166,32 @@ class PPOEnv(gym.Env):
         """
         # Increment step counter
         self.steps_taken += 1
+        randomisation_threshold = 40  # Threshold for randomization
         
-        # Apply the selected action to modify features
-        self.modified_features = self.apply_action(action)
+        # Compute temperature for action randomization
+        if self.steps_taken < randomisation_threshold:
+            temperature = 0.05  # Low temperature: trust the policy
+        else:
+            # Linearly increase temperature from 0.1 to 10.0 between steps 80 and 100
+            progress = (self.steps_taken - randomisation_threshold) / (self.max_steps - randomisation_threshold)
+            temperature = 0.05 + (10.0 - 0.05) * progress
 
+        # Get action probabilities from the PPO policy
+        action_probs = self.get_action_probs(action, temperature)
+
+        # Sample action from modified probabilities
+        action = np.random.choice(self.action_space.n, p=action_probs)
+
+        # Apply the selected action
+        self.modified_features = self.apply_action(action)
+        
         # Get the new prediction
         modified_prediction = self.generate_prediction(self.model, self.modified_features)
         
-        # Calculate distance between original and modified features (using raw features)
+        # Calculate distance
         distance = self.calculate_distance(self.original_features, self.modified_features)
-          
-        # Determine if we found a counterfactual (class changed)
+        
+        # Check if counterfactual found
         counterfactual_found = (modified_prediction != self.original_prediction)
         
         # Check if episode is done
@@ -185,7 +200,7 @@ class PPOEnv(gym.Env):
         # Calculate reward
         reward = self.calculate_reward(distance, counterfactual_found)
         
-        # Get the next observation
+        # Get next observation
         observation = self._get_observation()
         
         # Prepare info dictionary
@@ -195,11 +210,35 @@ class PPOEnv(gym.Env):
             'original_prediction': self.original_prediction,
             'modified_prediction': modified_prediction,
             'steps_taken': self.steps_taken,
-            'modified_features': self.modified_features
+            'modified_features': self.modified_features,
+            'action_taken': self._action_idx_to_name(action)
         }
         
         self.done = done
         return observation, reward, done, info
+
+    def get_action_probs(self, action, temperature):
+        """
+        Compute action probabilities with temperature-based randomization.
+        
+        Parameters:
+            action: The action suggested by the PPO policy
+            temperature: Temperature parameter to control randomness
+        
+        Returns:
+            probs: Modified action probabilities
+        """
+        # Get the PPO model's action logits (unnormalized probabilities)
+        # Note: This requires access to the model's policy, which isn't directly exposed in stable_baselines3
+        # As a workaround, we assume the provided action is the most likely and soften the distribution
+        n_actions = self.action_space.n
+        probs = np.ones(n_actions) / n_actions  # Start with uniform distribution
+        probs[action] += 1.0  # Bias toward the suggested action
+
+        # Apply temperature scaling
+        probs = np.exp(np.log(probs + 1e-10) / temperature)
+        probs = probs / (np.sum(probs) + 1e-10)  # Normalize to sum to 1
+        return probs
 
     def _get_observation(self):
         """Create observation vector from current state."""
@@ -291,17 +330,32 @@ class PPOEnv(gym.Env):
 
 
     def calculate_reward(self, distance, counterfactual_found):
-        """
-        Reward function:
-        - High reward if class changes (counterfactual)
-        - Gradual reward for reducing confidence in original class
-        - Penalize long trajectories and large distances
-        """
+        # Get model probabilities for modified features
+        features_encoded = self.encode_features(self.modified_features)
+        features_tensor = torch.tensor(features_encoded, dtype=torch.float32).unsqueeze(0)
+        with torch.no_grad():
+            logits = self.model(features_tensor)
+            probs = torch.softmax(logits, dim=-1).squeeze().numpy()
+        
+        # Reward based on reducing confidence in original class
+        original_class_prob = probs[self.original_prediction]
+        confidence_reward = 10 - 10 * original_class_prob  # Higher reward for lower confidence
+        
+        # Distance penalty
+        #distance_penalty = -0.1 * distance
+        
+        # number of features modified
+        num_modified_features = sum(1 for o, m in zip(self.original_features, self.modified_features) if o != m)
+        # Reward based on number of features modified
+        #print(f"Number of modified features: {num_modified_features}")
+        num_features_reward = 5 * num_modified_features if counterfactual_found else 0.0
 
-        if counterfactual_found:
-            return 100 + 100 / (distance +1e-6)  # High reward for finding a counterfactual, inversely proportional to distance
-        else:
-            return -0.5
+        # Counterfactual bonus
+        counterfactual_bonus = 100.0 if counterfactual_found else 0.0
+        
+        # Total reward
+        reward = confidence_reward + num_features_reward + counterfactual_bonus
+        return reward
 
 
 
@@ -344,8 +398,7 @@ class PPOEnv(gym.Env):
 
                         # Select next category in a deterministic way
                         if available_values:
-                            # Choose next category based on step count for more systematic exploration
-                            next_value = available_values[self.steps_taken % len(available_values)]
+                            next_value = np.random.choice(available_values)
                             modified_features[feature_index] = next_value
 
                 # Handle continuous features with adaptive step sizes
@@ -360,8 +413,7 @@ class PPOEnv(gym.Env):
                     fine_step = 0.10  # 10% change
 
                     # Adaptive step size: larger at beginning, finer as we progress
-                    step_size = base_step * (1 - progress) + fine_step * progress
-
+                    step_size = np.random.uniform(0.05, 0.25) * (1 - progress) + np.random.uniform(0.05, 0.15) * progress
                     # Apply the step
                     if action_type == 'increase':
                         max_value = self.tab_dataset.iloc[:, feature_index].max()

@@ -8,6 +8,7 @@ from stable_baselines3 import PPO,A2C
 from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 from tqdm import tqdm
+from closest_samples import get_closest_samples
 
 from PPO_env import PPOEnv, PPOMonitorCallback
 from Classifier_model import Classifier, evaluate_model_on_full_dataset, train_model
@@ -144,9 +145,9 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
         model = PPO(
             policy="MlpPolicy",
             env=env,
-            learning_rate=3e-4,
+            learning_rate=1e-4,
             n_steps=2048,
-            batch_size=64,
+            batch_size=128,
             n_epochs=10,
             gamma=0.99,
             gae_lambda=0.95,
@@ -277,65 +278,78 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
     counterfactuals = []
     original_samples = []
     counterfactual_samples = []
-    feature_columns = original_data.columns[:-1].tolist()  # Exclude target column
+    feature_columns = original_data.columns[:-1].tolist()
     
     success_count = 0
     total_steps = 0
     start_time = time.time()
     
     for i, idx in tqdm(enumerate(indices_to_use), total=num_samples, desc="Generating counterfactuals"):
-        # Reset environment with specific index
+        # Initialize for the sample
         env.current_instance_idx = idx
-        obs = env.reset()
-
+        success = False
+        tries = 0
+        max_tries = 5
+        best_info = None
+        total_steps_for_sample = 0
         
-        done = False
-        steps = 0
+        while tries < max_tries and not success:
+            # Reset environment for each try
+            obs = env.reset()
+            original_features = env.original_features
+            original_prediction = env.original_prediction
+            current_idx = env.current_instance_idx
+            done = False
+            steps = 0
+            
+            #print(f"\nProcessing sample {i+1} (index {idx}), try {tries+1}/{max_tries}")
+            
+            while not done and steps < max_steps_per_sample:
+                if use_mcts:
+                    action = mcts.run_mcts(root_state=obs, temperature=0.5)
+                else:
+                    action, _ = ppo_model.predict(obs, deterministic=True)
+                
+                obs, reward, done, info = env.step(action)
+                steps += 1
+                total_steps_for_sample += 1
+                
+                if info['counterfactual_found']:
+                    success = True
+                    success_count += 1
+                    best_info = info
+                    #print(f"Counterfactual found for sample {i+1} in {steps} steps on try {tries+1}")
+                    break
+            
+            if not success:
+                #print(f"Counterfactual not found for sample {i+1} after {steps} steps on try {tries+1}")
+                best_info = info  # Store the last attempt's info for failed cases
+            
+            tries += 1
         
-        original_features = env.original_features
-        original_prediction = env.original_prediction
-        current_idx = env.current_instance_idx
-        print(f"\nProcessing sample : {original_features}")
-        while not done and steps < max_steps_per_sample :
-            if use_mcts:
-                # Use MCTS to select action
-                action = mcts.run_mcts(root_state=obs, temperature=0.5)
-            else:
-                # Use standard PPO policy directly
-                action, probs = ppo_model.predict(obs, deterministic=True)
-
-            obs, reward, done, info = env.step(action)
-            print(info['modified_features'])
-            steps += 1
-            
-            total_steps += steps
-            # Add to counterfactual list (detailed info with metadata)
-            
-            if info['counterfactual_found']:
-                success_count += 1
-
-
+        # Store the result (successful or last attempt if failed)
         counterfactuals.append({
-                'sample_id': i,
-                'data_index': current_idx,
-                'original_features': original_features,
-                'counterfactual_features': info['modified_features'],
-                'original_prediction': original_prediction,
-                'counterfactual_prediction': info['modified_prediction'],
-                'distance': info['distance'],
-                'steps': steps
-            })
+            'sample_id': i,
+            'data_index': current_idx,
+            'original_features': original_features,
+            'counterfactual_features': best_info['modified_features'] if best_info else None,
+            'original_prediction': original_prediction,
+            'counterfactual_prediction': best_info['modified_prediction'] if best_info else original_prediction,
+            'distance': best_info['distance'] if best_info else float('inf'),
+            'steps': total_steps_for_sample,
+            'tries': tries,
+            'success': success
+        })
         original_samples.append(original_features)
-        counterfactual_samples.append(info['modified_features'])
-        print(f"\nSample {i+1} - {counterfactuals[-1]['counterfactual_prediction'] }->{ counterfactuals[-1]['original_prediction']} - {counterfactuals[-1]['distance']:.2f}")
-        print(f"{counterfactuals[-1]['original_features']}\n{counterfactuals[-1]['counterfactual_features']}")
-        # Save intermediate results if batch_size is specified
+        counterfactual_samples.append(best_info['modified_features'] if best_info else original_features)
+        
+        total_steps += total_steps_for_sample
+        
         if batch_size and (i + 1) % batch_size == 0:
             intermediate_save_path = f"{os.path.splitext(save_path)[0]}_batch_{(i+1)//batch_size}.csv"
             _save_counterfactuals(counterfactuals, original_data, intermediate_save_path)
             print(f"Saved intermediate results to {intermediate_save_path}")
     
-    # Create dataframes for KPI calculation
     original_df = pd.DataFrame(original_samples, columns=feature_columns)
     counterfactual_df = pd.DataFrame(counterfactual_samples, columns=feature_columns)
     
@@ -419,7 +433,7 @@ def _save_counterfactuals(counterfactuals, original_data, save_path):
   
     return counterfactuals
 
-TOTAL_TIMESTEPS = 000  # Total timesteps for training
+TOTAL_TIMESTEPS = 0000  # Total timesteps for training
 
 def main():
     # Specify the dataset path
