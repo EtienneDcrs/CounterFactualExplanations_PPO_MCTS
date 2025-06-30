@@ -4,7 +4,7 @@ import time
 import torch
 import numpy as np
 import pandas as pd
-from stable_baselines3 import PPO,A2C
+from stable_baselines3 import PPO, A2C
 from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 from tqdm import tqdm
@@ -19,14 +19,14 @@ warnings.filterwarnings("ignore")
 
 def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_logs', 
                                   save_dir='ppo_models', total_timesteps=100000, 
-                                  continue_training=True):
+                                  continue_training=True, constraints=None):
     """
     Train a PPO agent to generate counterfactuals for a given classifier model.
     
     Parameters:
     -----------
     dataset_path : str
-        Path to the dataset CSV file
+       	Path to the dataset CSV file
     model_path : str, optional
         Path to the pre-trained classifier model
     logs_dir : str
@@ -37,6 +37,8 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
         Total number of training timesteps
     continue_training : bool
         Whether to continue training an existing PPO model if available
+    constraints : dict, optional
+        Dictionary specifying feature constraints (e.g., {"age": "increase", "education_number": "fixed"})
         
     Returns:
     --------
@@ -68,7 +70,6 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
         model_path = f"{os.path.splitext(os.path.basename(dataset_path))[0]}_model.pt"
         model_path = os.path.join("classification_models", model_path)
     # Check if the classifier model exists, otherwise exit
-
     if not os.path.exists(model_path):
         print(f"Classifier model not found at {model_path}. Training a new one.")
         train_model(dataset_path, model_path)
@@ -112,8 +113,8 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
     except Exception as e:
         print(f"Failed to load scaler: {e}")
     
-    env = PPOEnv(dataset_path=dataset_path, model=classifier, label_encoders=label_encoders, scaler=scaler)
-    eval_env = PPOEnv(dataset_path=dataset_path, model=classifier, label_encoders=label_encoders, scaler=scaler)
+    env = PPOEnv(dataset_path=dataset_path, model=classifier, label_encoders=label_encoders, scaler=scaler, constraints=constraints)
+    eval_env = PPOEnv(dataset_path=dataset_path, model=classifier, label_encoders=label_encoders, scaler=scaler, constraints=constraints)
 
     # Define PPO model path
     ppo_model_path = os.path.join(save_dir, f"ppo_certifai_final_{os.path.basename(dataset_path)}.zip")
@@ -239,7 +240,7 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
     """
     print(f"Generating counterfactuals...")
     
-     # Initialize MCTS if needed
+    # Initialize MCTS if needed
     mcts = None
     if use_mcts:
         print(f"Initializing MCTS with {mcts_simulations} simulations per step")
@@ -248,7 +249,6 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
             ppo_model=ppo_model,
             num_simulations=mcts_simulations
         )
-
 
     # Ensure dataset_path includes data directory if not already
     if not dataset_path.startswith('data/') and not os.path.dirname(dataset_path):
@@ -376,7 +376,6 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
                 categorical_features.append(col)
         
         try:
-            
             # Calculate proximity
             proximity = proximity_KPI(original_df, counterfactual_df, 
                                      con=continuous_features, 
@@ -433,15 +432,21 @@ def _save_counterfactuals(counterfactuals, original_data, save_path):
   
     return counterfactuals
 
-TOTAL_TIMESTEPS = 0000  # Total timesteps for training
+TOTAL_TIMESTEPS = 75000  # Total timesteps for training
 
 def main():
     # Specify the dataset path
     #dataset_path = 'data/drug200.csv'
+    dataset_path = 'data/adult.csv'
     dataset_path = 'data/diabetes.csv'
     dataset_path = 'data/breast_cancer.csv'
     dataset_path = 'data/bank.csv'
-    dataset_path = 'data/adult.csv'
+    
+    # Define constraints for features
+    constraints = {
+        "Pregnancies": "increase",
+        "Age": "increase"
+    }
     
     # Create logs and model directories
     logs_dir = 'ppo_logs'
@@ -449,9 +454,8 @@ def main():
     os.makedirs('data', exist_ok=True)
     
     # Define whether to continue training an existing model
-    continue_training = True
+    continue_training = False
     
-
     # Train the PPO model (will load and continue if it exists)
     print("Training new PPO model...")
     ppo_model, env = train_ppo_for_counterfactuals(
@@ -459,12 +463,12 @@ def main():
         logs_dir=logs_dir,
         save_dir=save_dir,
         total_timesteps=TOTAL_TIMESTEPS, 
-        continue_training=continue_training
+        continue_training=continue_training,
+        constraints=constraints
     )
     
     if ppo_model is not None:
-                
-        # take the first 100 samples from the dataset
+        # Take the first 100 samples from the dataset
         indices_to_use = list(range(100))
 
         # Generate counterfactuals - with standard PPO
@@ -479,7 +483,5 @@ def main():
             specific_indices=indices_to_use
         )
 
-
-
-import cProfile
-cProfile.run('main()', 'output.prof')
+if __name__ == "__main__":
+    main()

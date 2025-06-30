@@ -9,7 +9,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 
 class PPOEnv(gym.Env):
-    def __init__(self, dataset_path=None, numpy_dataset=None, model=None, distance_metric=None,label_encoders=None, scaler=None):
+    def __init__(self, dataset_path=None, numpy_dataset=None, model=None, distance_metric=None, label_encoders=None, scaler=None, constraints=None):
         """
         Initialize the PPO environment for counterfactual generation.
         
@@ -18,6 +18,7 @@ class PPOEnv(gym.Env):
         - numpy_dataset: Dataset as numpy array (optional)
         - model: The classification model we're generating counterfactuals for
         - distance_metric: Distance function to use (default: custom hybrid distance)
+        - constraints: Dictionary specifying feature constraints (e.g., {"age": "increase", "education_number": "fixed"})
         """
         super(PPOEnv, self).__init__()
         
@@ -27,6 +28,7 @@ class PPOEnv(gym.Env):
         self.tab_dataset = None
         self.label_encoders = label_encoders
         self.scaler = scaler
+        self.constraints = constraints or {}  # Store constraints dictionary, default to empty dict
         
         if dataset_path is not None:
             self.tab_dataset = pd.read_csv(dataset_path)
@@ -71,21 +73,9 @@ class PPOEnv(gym.Env):
         self.modified_encoded = None
         self.steps_taken = 0
         
-        # Default constraints (which features can be modified)
-        self.constraints = [1] * (len(self.tab_dataset.columns) - 1)  # Exclude target variable
-        
-        # For each categorical feature, set constraints to 0
-        for i, feature in enumerate(self.tab_dataset.columns[:-1]):  # Exclude target variable
-            if feature in self.cat_columns:
-                self.constraints[i] = 1          
-
-        # Define action space based on features that can be modified
-        self.action_space = self.define_action_space()
-        
         # Convert the list of action names to a proper gym action space
-        self.action_space = spaces.Discrete(len(self.action_space))
         self.action_names = self.define_action_space()
-
+        self.action_space = spaces.Discrete(len(self.action_names))
         
         # Define observation space
         # Original features + modified features + metadata (steps, distance, etc.)
@@ -131,7 +121,7 @@ class PPOEnv(gym.Env):
                 output = self.model(torch.tensor(test_features, dtype=torch.float32).unsqueeze(0))
             self.model_output_dim = output.shape[-1]
 
-        # Mise à jour dynamique de observation_space
+        # Update observation_space dynamically
         if not hasattr(self, '_obs_space_updated'):
             full_obs_dim = len(self._get_observation())
             self.observation_space = spaces.Box(
@@ -141,8 +131,6 @@ class PPOEnv(gym.Env):
                 dtype=np.float32
             )
             self._obs_space_updated = True
-
-
 
         # Reset tracking variables
         self.steps_taken = 0
@@ -242,16 +230,16 @@ class PPOEnv(gym.Env):
 
     def _get_observation(self):
         """Create observation vector from current state."""
-        # Distance L1 (déjà optimisé)
+        # Distance L1 (already optimized)
         distance = self.calculate_distance(self.original_features, self.modified_features)
         steps_normalized = self.steps_taken / self.max_steps
         self.sample_distance = distance
 
-        # One-hot encoding de la classe originale
+        # One-hot encoding of the original class
         target_vector = np.zeros(self.model_output_dim, dtype=np.float32)
         target_vector[self.original_prediction] = 1.0
 
-        # Observation finale
+        # Final observation
         observation = np.concatenate([
             self.original_encoded,
             self.modified_encoded,
@@ -261,61 +249,6 @@ class PPOEnv(gym.Env):
 
         return np.nan_to_num(observation, nan=0.0)
 
-
-
-    def calculate_distance_old(self, original_features, modified_features):
-        """Calculate the distance between original and modified features using raw features."""
-        """
-        Calculate hybrid distance that treats categorical and continuous features differently.
-        
-        - Categorical features: 100% change if different, 0% if same
-        - Continuous features: Relative percentage change normalized by feature range
-        
-        Args:
-            original_features: Original feature values (raw, not encoded)
-            modified_features: Modified feature values (raw, not encoded)
-        
-        Returns:
-            float: Weighted distance score
-        """
-        if len(original_features) != len(modified_features):
-            raise ValueError("Feature vectors must have the same length")
-        
-        total_distance = 0.0
-        num_features = len(original_features)
-        
-        for i in range(num_features):
-            feature_info = self.feature_ranges.get(i, {})
-            orig_val = original_features[i]
-            mod_val = modified_features[i]
-            
-            if feature_info['type'] == 'categorical' or isinstance(orig_val, str) or isinstance(orig_val, bool):
-                # Categorical feature: 100% change if different, 0% if same
-                if pd.isna(orig_val) and pd.isna(mod_val):
-                # Both are NaN - no change
-                    continue  # No contribution to distance
-                elif pd.isna(orig_val) or pd.isna(mod_val):
-                    # One is NaN, the other isn't - they differ
-                    total_distance += 1.0
-                elif orig_val != mod_val:
-                    total_distance += 1.0  # 100% change
-                
-            else:  # continuous feature
-                if pd.isna(orig_val) or pd.isna(mod_val):
-                    total_distance += 1.0  # Consider NaN as a significant change
-                # Continuous feature: relative percentage change
-                elif orig_val != mod_val:
-                    # Calculate relative change as percentage of feature range
-                    try:
-                        relative_change = max(mod_val, orig_val) / min(mod_val, orig_val) - 1 if min(mod_val, orig_val) != 0 else max(mod_val, orig_val)
-                        total_distance += relative_change
-                    except:
-                        print(f"Error calculating relative change for feature {i}: {orig_val} -> {mod_val}")
-                # else: feature has no variance, no contribution to distance
-        
-        # Normalize by number of features to get average distance per feature
-        return total_distance
-
     def calculate_distance(self, original_features, modified_features):
         """
         Calculate L1 (Manhattan) distance between encoded original and modified features.
@@ -323,11 +256,10 @@ class PPOEnv(gym.Env):
         dist = 0
         for i, (o, m) in enumerate(zip(original_features, modified_features)):
             if i in self.categorical_indices:
-                dist += float(o != m)  # 1 si changé
+                dist += float(o != m)  # 1 if changed
             else:
                 dist += abs(o - m)
         return dist
-
 
     def calculate_reward(self, distance, counterfactual_found):
         # Get model probabilities for modified features
@@ -341,14 +273,10 @@ class PPOEnv(gym.Env):
         original_class_prob = probs[self.original_prediction]
         confidence_reward = 10 - 10 * original_class_prob  # Higher reward for lower confidence
         
-        # Distance penalty
-        #distance_penalty = -0.1 * distance
-        
-        # number of features modified
+        # Number of features modified
         num_modified_features = sum(1 for o, m in zip(self.original_features, self.modified_features) if o != m)
         # Reward based on number of features modified
-        #print(f"Number of modified features: {num_modified_features}")
-        num_features_reward = 5 * num_modified_features if counterfactual_found else 0.0
+        num_features_reward = 0 * num_modified_features if counterfactual_found else 0.0
 
         # Counterfactual bonus
         counterfactual_bonus = 100.0 if counterfactual_found else 0.0
@@ -357,15 +285,12 @@ class PPOEnv(gym.Env):
         reward = confidence_reward + num_features_reward + counterfactual_bonus
         return reward
 
-
-
     def apply_action(self, action_idx):
         """
         Apply the selected action to modify features, with stage-specific behaviors.
 
         Parameters:
             action_idx: Index of the action to take
-            stage: Current training stage (1 or 2)
 
         Returns:
             modified_features: The features after applying the action
@@ -405,12 +330,8 @@ class PPOEnv(gym.Env):
                 elif action_type in ['increase', 'decrease']:
                     current_value = modified_features[feature_index]
 
-                    # Adaptive step size based on progress through episode and training stage
+                    # Adaptive step size based on progress through episode
                     progress = self.steps_taken / self.max_steps
-
-                    # Stage-specific step size adjustments
-                    base_step = 0.20  # 20% change for broader exploration
-                    fine_step = 0.10  # 10% change
 
                     # Adaptive step size: larger at beginning, finer as we progress
                     step_size = np.random.uniform(0.05, 0.25) * (1 - progress) + np.random.uniform(0.05, 0.15) * progress
@@ -446,7 +367,6 @@ class PPOEnv(gym.Env):
         """Convert action index to action name."""
         return self.action_names[action_idx]
 
-
     def encode_features(self, features):
         X = np.array(features, dtype=object).reshape(1, -1)  # shape (1, n)
         
@@ -465,26 +385,36 @@ class PPOEnv(gym.Env):
 
         return X.flatten().astype(np.float32)
 
-
-
-    def define_action_space(self, constraints=None):
-        # Define the action space based on the features
+    def define_action_space(self):
+        """
+        Define the action space based on the features and constraints.
+        Features in constraints with 'fixed' are excluded, 'increase' or 'decrease' limit continuous features,
+        and unconstrained features allow full modification.
+        """
         action_space = []
-        if constraints is None:
-            constraints = self.constraints  # Use default constraints if not provided
-        if constraints is None:
-            constraints = [1] * len(self.tab_dataset.columns)  # Default to no constraints
-
-        for i, column in enumerate(self.tab_dataset.columns[:-1]):  # Exclude the target variable
-            # if the feature is constrained, skip it : fixed features aren't present in the action space
-            if constraints[i] == 0:
-                    continue
-            if self.tab_dataset[column].dtype == 'O':  # Categorical feature
-                action_space.append(f'change_{column}')
-            else:  # Continuous feature
-                action_space.append(f'increase_{column}')
-                action_space.append(f'decrease_{column}')
+        
+        for column in self.tab_dataset.columns[:-1]:  # Exclude the target variable
+            # Check if the feature has a constraint
+            constraint = self.constraints.get(column, None)
+            
+            # If feature is fixed, skip it (no actions added)
+            if constraint == "fixed":
+                continue
                 
+            if self.tab_dataset[column].dtype == 'O':  # Categorical feature
+                # Categorical features are only modified via 'change' action, unless fixed
+                if constraint in [None, "change"]:  # Allow change if unconstrained or explicitly allowed
+                    action_space.append(f'change_{column}')
+            else:  # Continuous feature
+                # Add actions based on constraint
+                if constraint == "increase":
+                    action_space.append(f'increase_{column}')
+                elif constraint == "decrease":
+                    action_space.append(f'decrease_{column}')
+                elif constraint is None:  # No constraint, allow both increase and decrease
+                    action_space.append(f'increase_{column}')
+                    action_space.append(f'decrease_{column}')
+        print(f"Defined action space with {len(action_space)} actions: {action_space}")
         return action_space
 
     def generate_prediction(self, model, features):
@@ -495,18 +425,14 @@ class PPOEnv(gym.Env):
                 logits = model(features_tensor)
                 probs = torch.softmax(logits, dim=-1).squeeze().numpy()
                 pred_class = np.argmax(probs)
-
-            #print(f"Prediction: {pred_class}, probs: {probs}")
             return pred_class
         except Exception as e:
             print(f"Error in generate_prediction: {e}")
             return 0
 
-
     def get_con_cat_columns(self, x):
         """Identify continuous and categorical columns in the dataset."""
-        assert isinstance(x, pd.DataFrame), 'This method can be used only if input\
-            is an instance of pandas dataframe at the moment.'
+        assert isinstance(x, pd.DataFrame), 'This method can be used only if input is an instance of pandas dataframe at the moment.'
         
         con = []
         cat = []
@@ -540,8 +466,6 @@ class PPOEnv(gym.Env):
 
         self.cat_maps = cat_maps  
         return cat_ids
-
-
 
 class PPOMonitorCallback(BaseCallback):
     """

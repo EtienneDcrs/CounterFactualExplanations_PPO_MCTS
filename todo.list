@@ -1,4 +1,6 @@
-Essayer avec Certifai, Dice et comparer les résultats
-Mettre des contraintes sur les features (features fixées ou only increase)
-Générer plusiers contre-factuels pour chaque instance
-Utiliser les KPIs de Slimane sur cette version
+    X               Essayer avec d'autres datasets  -> 100% sur adult, diabetes, breast_cancer, bank
+    01/07           Essayer avec Certifai, Dice et comparer les résultats
+    X               Mettre des contraintes sur les features (features fixées ou only increase)
+    30/06 >12h      Générer plusiers contre-factuels pour chaque instance
+    02-03/07        Utiliser les KPIs de Slimane sur cette version
+    02-03/07        Intégrer la diversité et plausibilité
