@@ -9,7 +9,8 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 
 class PPOEnv(gym.Env):
-    def __init__(self, dataset_path=None, numpy_dataset=None, model=None, distance_metric=None, label_encoders=None, scaler=None, constraints=None):
+    def __init__(self, dataset_path=None, numpy_dataset=None, model=None, distance_metric=None, 
+                 label_encoders=None, scaler=None, constraints=None, use_random_sampling=True):
         """
         Initialize the PPO environment for counterfactual generation.
         
@@ -18,7 +19,10 @@ class PPOEnv(gym.Env):
         - numpy_dataset: Dataset as numpy array (optional)
         - model: The classification model we're generating counterfactuals for
         - distance_metric: Distance function to use (default: custom hybrid distance)
+        - label_encoders: Label encoders for categorical features
+        - scaler: Scaler for continuous features
         - constraints: Dictionary specifying feature constraints (e.g., {"age": "increase", "education_number": "fixed"})
+        - use_random_sampling: Boolean flag to control whether reset uses random sampling (True) or fixed index (False)
         """
         super(PPOEnv, self).__init__()
         
@@ -29,6 +33,7 @@ class PPOEnv(gym.Env):
         self.label_encoders = label_encoders
         self.scaler = scaler
         self.constraints = constraints or {}  # Store constraints dictionary, default to empty dict
+        self.use_random_sampling = use_random_sampling  # New flag for sampling behavior
         
         if dataset_path is not None:
             self.tab_dataset = pd.read_csv(dataset_path)
@@ -101,8 +106,12 @@ class PPOEnv(gym.Env):
         Returns:
             observation: Initial state observation
         """
-        # Select a random instance from the dataset
-        self.current_instance_idx = np.random.randint(0, len(self.tab_dataset))
+        # Select instance based on use_random_sampling flag
+        if self.use_random_sampling:
+            self.current_instance_idx = np.random.randint(0, len(self.tab_dataset))
+        else:
+            if self.current_instance_idx is None or self.current_instance_idx < 0 or self.current_instance_idx >= len(self.tab_dataset):
+                raise ValueError(f"Invalid current_instance_idx: {self.current_instance_idx}. Must be set to a valid index when use_random_sampling=False")
         
         # Get the original features (excluding target variable) and create a copy for modification
         self.original_features = self.tab_dataset.iloc[self.current_instance_idx].values[:-1]
