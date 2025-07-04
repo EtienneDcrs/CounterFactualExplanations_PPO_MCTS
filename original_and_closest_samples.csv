@@ -1,27 +1,7 @@
-class,age,menopause,tumor-size,inv-nodes,node-caps,deg-malig,breast,breast-quad,distance,irradiat
-no-recurrence-events,40-49,premeno,35-39,9-11,yes,2,right,left_up,0.0,yes
-recurrence-events,-,-,25-29,-,-,3,-,-,3.5,no
--,-,-,20-24,0-2,no,-,-,-,4.0,no
--,50-59,-,-,0-2,no,-,-,-,4.0,no
--,-,-,25-29,0-2,no,-,-,-,4.0,no
--,-,-,20-24,0-2,no,-,-,-,4.0,no
--,-,-,-,0-2,no,-,-,right_up,4.0,no
--,-,-,30-34,3-5,-,-,-,left_low,4.0,no
--,-,-,20-24,3-5,no,-,-,-,4.0,no
--,-,-,10-14,0-2,no,-,-,-,4.0,no
-recurrence-events,50-59,-,50-54,-,-,-,-,-,4.0,no
-recurrence-events,-,-,30-34,6-8,-,3,-,-,4.5,no
-recurrence-events,-,-,15-19,0-2,-,3,-,-,4.5,no
--,-,-,20-24,0-2,no,-,-,right_up,5.0,no
--,-,-,0-4,0-2,no,-,-,right_low,5.0,no
--,-,-,25-29,0-2,no,-,left,-,5.0,no
--,-,-,40-44,0-2,no,-,-,left_low,5.0,no
--,-,-,10-14,0-2,no,-,left,-,5.0,no
--,-,-,25-29,0-2,no,-,-,left_low,5.0,no
--,20-29,-,-,0-2,no,-,-,right_up,5.0,no
--,-,-,10-14,0-2,no,1,-,-,5.0,no
--,-,-,25-29,0-2,no,-,-,central,5.0,no
--,-,-,40-44,0-2,no,1,-,-,5.0,no
--,-,-,30-34,0-2,no,-,-,right_low,5.0,no
--,-,-,10-14,0-2,no,-,-,left_low,5.0,no
--,-,-,30-34,0-2,no,1,-,-,5.0,no
+age,workclass,education,marital-status,occupation,race,sex,hours-per-week,distance,income
+74, Without-pay, Some-college, Married-AF-spouse, Tech-support, White, Female,36,0.0,1
+73, Private, HS-grad, Widowed, Other-service, White, Female,37,6.0, <=50K
+75, Private, Some-college, Married-civ-spouse, Exec-managerial, White, Male,35,6.0, >50K
+75, Self-emp-not-inc, Prof-school, Married-civ-spouse, Prof-specialty, White, Male,35,7.0, <=50K
+74, Self-emp-inc, Some-college, Widowed, Exec-managerial, White, Male,40,8.0, <=50K
+71, Self-emp-not-inc, HS-grad, Widowed, Adm-clerical, White, Female,35,8.0, <=50K

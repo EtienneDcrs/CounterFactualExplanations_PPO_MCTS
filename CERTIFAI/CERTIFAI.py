@@ -14,12 +14,11 @@ from sklearn.metrics.pairwise import manhattan_distances as L1
 from sklearn.metrics.pairwise import euclidean_distances as L2
 from skimage.metrics import structural_similarity as SSIM
 from tqdm import tqdm
-from KPIs import proximity_KPI, sparsity_KPI, validity_KPI
 
 
 class CERTIFAI:
     def __init__(self, Pm = .2, Pc = .5, dataset_path = None,
-                 numpy_dataset = None):
+                 numpy_dataset = None, label_encoders = None, scaler = None):
         """The class instance is initialised with the probabilities needed
         for the counterfactual generation process and an optional path leading
         to a .csv file containing the training set. If the path is provided,
@@ -28,31 +27,26 @@ class CERTIFAI:
         of the numpy or self defined alternatives."""
         
         self.Pm = Pm
-        
         self.Pc = Pc
-        
         self.Population = None
-        
         self.distance = None
+        self.label_encoders = label_encoders
+        self.scaler = scaler
         
         if dataset_path is not None:
             self.tab_dataset = pd.read_csv(dataset_path)
-            
         else:
             self.tab_dataset = None
-            
             if numpy_dataset is not None:
                 self.tab_dataset = numpy_dataset
             
         self.constraints = None
-        
         self.predictions = None
-        
         self.results = None
     
     @classmethod
-    def from_csv(cls, path):
-        return cls(dataset_path=path)
+    def from_csv(cls, path, label_encoders=None, scaler=None):
+        return cls(dataset_path=path, label_encoders=label_encoders, scaler=scaler)
     
     def change_Pm(self, new_Pm):
         '''Set the new probability for the second stage of counterfactual
@@ -100,28 +94,7 @@ class CERTIFAI:
         
     def Tab_distance(self, x, y, continuous_distance = 'L1', con = None,
                      cat = None):
-        """Distance function for tabular data, as described in the original
-        paper. This function is the default one for tabular data in the paper and
-        in the set_distance function below as well. For this function to be used,
-        the training set must consist of a .csv file as specified in the class
-        instatiation above. This way, pandas can be used to infer whether a
-        feature is categorical or not based on its pandas datatype and, as such, it is important that all columns
-        in the dataframe have the correct datatype.
-        
-        Arguments:
-            x (pandas.dataframe): the input sample from the training set. This needs to be
-            a row of a pandas dataframe at the moment, but the functionality of this
-            function will be extended to accept also numpy.ndarray.
-            
-            y (pandas.dataframe or numpy.ndarray): the comparison samples (i.e. here, the counterfactual)
-            which distance from x needs to be calculated.
-            
-            continuous_distance (bool): the distance function to be applied
-            to the continuous features. Default is L1 function.
-            
-            con (list): list of the continuous features (i.e. columns) names
-            
-            cat (list): list of the categorical features (i.e. columns) names
+        """Distance function for tabular data
         """
         
         assert isinstance(x, pd.DataFrame), 'This distance can be used only if input\
@@ -166,7 +139,56 @@ class CERTIFAI:
         
         return np.array(distances).reshape(1,-1)
             
+    def calculate_distance(self, original_features, modified_features, con=None, cat=None):
+        """
+        Calculate L1 (Manhattan) distance between encoded original and modified features.
+        """
+        original_df = pd.DataFrame([original_features], columns=self.tab_dataset.columns)
+        modified_df = pd.DataFrame([modified_features], columns=self.tab_dataset.columns)
         
+        if con is None or cat is None:
+            con, cat = self.get_con_cat_columns(original_df)
+        
+        dist = 0
+        for column in original_df.columns:
+            if column in cat:
+                # Categorical: count as 1 if values differ
+                dist += float(original_df[column].values[0] != modified_df[column].values[0])
+            else:
+                # Continuous: compute absolute difference, with fallback for non-numeric
+                try:
+                    dist += abs(float(original_df[column].values[0]) - float(modified_df[column].values[0]))
+                except (ValueError, TypeError):
+                    # Fallback for non-numeric continuous features
+                    dist += float(original_df[column].values[0] != modified_df[column].values[0])
+        
+        return dist
+        
+    def calculate_sparsity(self, original_features, modified_features, con=None, cat=None):
+        """
+        Calculate sparsity (number of modified features) between original and modified features.
+        """
+        original_df = pd.DataFrame([original_features], columns=self.tab_dataset.columns)
+        modified_df = pd.DataFrame([modified_features], columns=self.tab_dataset.columns)
+        
+        if con is None or cat is None:
+            con, cat = self.get_con_cat_columns(original_df)
+        
+        sparsity = 0
+        for column in original_df.columns:
+            if column in cat:
+                # Categorical: count as changed if values differ
+                sparsity += float(original_df[column].values[0] != modified_df[column].values[0])
+            else:
+                # Continuous: count as changed if absolute difference is significant
+                try:
+                    diff = abs(float(original_df[column].values[0]) - float(modified_df[column].values[0]))
+                    sparsity += float(diff > 1e-6)
+                except (ValueError, TypeError):
+                    # Fallback for non-numeric continuous features
+                    sparsity += float(original_df[column].values[0] != modified_df[column].values[0])
+        
+        return sparsity
         
     def set_distance(self, kind = 'automatic', x = None):
         """Set the distance function to be used in counterfactual generation.
@@ -174,19 +196,7 @@ class CERTIFAI:
         relative value to the kind argument or it can be inferred by passing the
         'automatic' value.
         
-        Arguments:
-            Inputs:
-                kind (string): possible values, representing the different
-                distance functions are: 'automatic', 'L1', 'SSIM', 'L2' and 'euclidean' (same as L2)
-                
-                x (numpy.ndarray or pandas.DataFrame): training set or a sample from it on the basis
-                of which the function will decide what distance function to use if kind=='automatic'.
-                Specifically, if the input is tridimensional, the function will choose the distance
-                function more suitable for images (SSIM), if the training set is a .csv file then
-                the function more suitable for tabular data will be used, otherwise the function
-                will backoff to using L1 norm distance.
-                
-            Outputs:
+             Outputs:
                 None, set the distance attribute as described above."""
         
         
@@ -200,7 +210,6 @@ class CERTIFAI:
             
             if len(x.shape)>2:
                 self.distance = self.img_distance
-                
                 print('SSIM distance has been set as default')
                 
             else:
@@ -256,24 +265,9 @@ class CERTIFAI:
         each constraint consist in the minimum and maximum value for 
         the given continuous feature. If a categorical feature is encountered,
         then the number of unique categories is appended to the list instead.
-        
-        Arguments:
-            Inputs:
-            x (numpy.ndarray): if the training set is not a pandas dataframe (see above),
-            this function will expect a numpy array with the entire training set in the
-            form of a numpy array.
-            
-            fixed (list): a list of features to be kept fixed in counterfactual generation 
-            (i.e. all counterfactual will have the same value as the given sample for that
-            feature). If no list is provided, then no feature will be kept fixed 
-            
-            Outputs:
-                None, an attribute 'constraints' is created for the class, where
-                the constraints are stored.
             '''
         
         fixed_feats = set() if fixed is None else set(fixed)
-        print(fixed_feats)
         
         self.constraints = []
         
@@ -307,9 +301,7 @@ class CERTIFAI:
                 else:
                     self.constraints.append((min(x[:,i]), max(x[:, i])))
                 
-        
-    
-    def transform_x_2_input(self, x, pytorch = True):
+    def transform_x_2_input(self, x, pytorch=True):
         '''Function to transform the raw input in the form of a pandas dataset
         or of a numpy array to the required format as input of the neural net(s)
         
@@ -318,7 +310,7 @@ class CERTIFAI:
                 x (pandas.DataFrame or numpy.ndarray): the "raw" input to be
                 transformed.
                 
-                torch (bool): the deep learning library
+                pytorch (bool): the deep learning library
                 used for training the model analysed. Options are torch==True for 
                 pytorch and torch==False for tensorflow/keras
                 
@@ -327,31 +319,41 @@ class CERTIFAI:
                 input, ready to be passed into the model.'''
                 
         if isinstance(x, pd.DataFrame):
-            
             x = x.copy()
-            
             con, cat = self.get_con_cat_columns(x)
             
-            if len(cat)>0:
-                
+            if len(cat) > 0 and self.label_encoders is not None:
                 for feature in cat:
-                    
-                    enc = LabelEncoder()
-                    
-                    x[feature] = enc.fit(x[feature]).transform(x[feature])
+                    if feature in self.label_encoders:
+                        try:
+                            x[feature] = self.label_encoders[feature].transform(x[feature])
+                        except ValueError as e:
+                            print(f"Warning: Unknown category in column {feature}. Using fit_transform instead.")
+                            enc = LabelEncoder()
+                            x[feature] = enc.fit_transform(x[feature])
+                    else:
+                        enc = LabelEncoder()
+                        x[feature] = enc.fit_transform(x[feature])
             
-            model_input = torch.tensor(x.values, dtype=torch.float) if pytorch else x.values
+            if self.scaler is not None:
+                feature_columns = x.columns[:-1]  # Exclude target column
+                x[feature_columns] = self.scaler.transform(x[feature_columns])
+            
+            # Exclude the target column (last column) to match model's expected input
+            model_input = torch.tensor(x.iloc[:, :-1].values, dtype=torch.float) if pytorch else x.iloc[:, :-1].values
             
         elif isinstance(x, np.ndarray):
-            
-            model_input = torch.tensor(x, dtype = torch.float) if pytorch else x
-            
+            if self.scaler is not None:
+                x = x.copy()
+                x[:, :-1] = self.scaler.transform(x[:, :-1])  # Exclude target column
+            # Exclude the target column (last column) to match model's expected input
+            model_input = torch.tensor(x[:, :-1], dtype=torch.float) if pytorch else x[:, :-1]
         else:
             raise ValueError("The input x must be a pandas dataframe or a numpy array")
             
         return model_input
     
-    def generate_prediction(self, model, model_input, pytorch=True, classification = True):
+    def generate_prediction(self, model, model_input, pytorch=True, classification=True):
         '''Function to output prediction from a deep learning model
         
         Arguments:
@@ -359,29 +361,29 @@ class CERTIFAI:
                 model (torch.nn.Module or tf.Keras.Model): the trained deep learning
                 model.
                 
-                x (torch.tensor or numpy.ndarray): the input to the model.
+                model_input (torch.tensor or numpy.ndarray): the input to the model.
                 
                 pytorch (bool): whether pytorch or keras is used.
                 
                 classification (bool): whether a classification or regression task is performed.
                 
-            Output
+            Output:
                 prediction (numpy.ndarray): the array containing the single greedily predicted
                 class (in the case of classification) or the single or multiple predicted value
                 (when classification = False).
-                '''
+        '''
         
         if classification:
             if pytorch:
                 with torch.no_grad():
-                    prediction = np.argmax(model(model_input, apply_softmax=True).numpy(), axis = -1)
+                    logits = model(model_input, apply_softmax=False)
+                    prediction = torch.argmax(logits, dim=-1).cpu().numpy()
             else:
-                prediction = np.argmax(model.predict(model_input), axis = -1)
-                
+                prediction = np.argmax(model.predict(model_input), axis=-1)
         else:
             if pytorch:
                 with torch.no_grad():
-                    prediction = model(model_input).numpy()
+                    prediction = model(model_input).cpu().numpy()
             else:
                 prediction = model.predict(model_input)
                 
@@ -393,30 +395,7 @@ class CERTIFAI:
         '''Function to generate and trim at the same time the list containing
         the counterfactuals and a dictionary having fitness score
         for each counterfactual index in the list. 
-        
-        Arguments:
-            Inputs:
-                counterfacts_list (list): list containing each counterfactual
-                
-                distances (numpy.ndarray): array containing distance from sample
-                for each counterfactual
-                
-                fitness_dict (dict): dictionary containing the fitness score
-                (i.e. distance) for each counterfactual index in the list
-                as key. If an empty dictionary is passed to the function, then
-                the index of the counterfactual starts from 0, else it starts
-                counting from the value of the start argument.
-                
-                start (int): index from which to start assigning keys for
-                the dictionary
-                
-            Outputs:
-                selected_counterfacts (list): list of top counterfacts from
-                the input list, selected on the basis of their fitness score
-                and having length=retain_k
-                
-                fitness_dict (dict): dictionary of fitness scores stored
-                by the relative counterfactual index.'''
+        '''
                 
         gen_dict = {i:distance for i, 
                                 distance in enumerate(distances)}
@@ -443,24 +422,6 @@ class CERTIFAI:
     def generate_cats_ids(self, dataset = None, cat = None):
         '''Generate the unique categorical values of the relative features
         in the dataset.
-        
-        Arguments:
-            Inputs:
-            
-            dataset (pandas.dataframe): the reference dataset from which to extract
-            the categorical values. If not provided, the function will assume that
-            a dataframe has been saved in the class instance when created, via the
-            option for initialising it from a csv file.
-            
-            cat (list): list of categorical features in the reference dataset. If
-            not provided, the list will be obtained via the relative function of
-            this class.
-            
-            Output:
-                
-            cat_ids (list): a list of tuples containing the unique categorical values
-            for each categorical feature in the dataset, their number and the relative
-            column index.
         '''
         if dataset is None:
             assert self.tab_dataset is not None, 'If the dataset is not provided\
@@ -479,117 +440,48 @@ class CERTIFAI:
                                 pd.unique(dataset[key])))
         return cat_ids
     
-    def generate_candidates_tab(self, 
-                                sample,
-                                normalisation = None, 
-                                constrained = True,
-                                has_cat = False,
-                                cat_ids = None,
-                                img = False):
-        '''Function to generate the random (constrained or unconstrained)
-        candidates for counterfactual generation if the input is a pandas
-        dataframe (i.e. tabular data).
-        
-        Arguments:
-            Inputs:
-                sample (pandas.dataframe): the input sample for which counterfactuals
-                need to be generated.
-                
-                normalisation (str) ["standard", "max_scaler"]: the
-                normalisation technique used for the data at hand. Default
-                is None, while "standard" and "max_scaler" techniques are
-                the other possible options. According to the chosen value
-                different random number generators are used.
-                
-                constrained (bool): whether the generation of each feature
-                will be constrained by its minimum and maximum value in the
-                training set (it applies just for the not normalised scenario
-                            as there is no need otherwise)
-                
-                has_cat (bool): whether the input sample includes categorical
-                variables or not (they are treated differently in the distance
-                                function used in the original paper).
-                
-                cat_ids (list): list of the names of columns containing categorical
-                values.
-                
-            Outputs:
-                generation (list): a list of the random candidates generated.
-                
-                distances (numpy.ndarray): an array of distances of the candidates
-                from the current input sample.
-                '''
-        
+    def generate_candidates_tab(self, sample, normalisation=None, constrained=True, has_cat=False, cat_ids=None, img=False):
         nfeats = sample.shape[-1]
         
         if normalisation is None:
-                            
             if constrained:
-                
                 generation = []
-                
                 temp = []
                 for constraint in self.constraints:
                     if not isinstance(constraint, tuple):
-                        # In this case the given feature is fixed
-                        # Reshape to ensure consistent dimensionality - repeat the fixed value for all population members
-                        fixed_value = sample.loc[:,constraint].values[0]  # Get the single value
-                        repeated_values = np.full((self.Population, 1), fixed_value)  # Repeat for entire population
-                        temp.append(repeated_values)
+                        temp.append(sample.loc[:, constraint].values)
                     else:
                         temp.append(np.random.randint(constraint[0]*100, (constraint[1]+1)*100,
-                                                    size = (self.Population, 1))/100
-                                    )
-                
-                generation = np.concatenate(temp, axis = -1)
-                
+                                                    size=(self.Population, 1))/100)
+                generation = np.concatenate(temp, axis=-1)
             else:
-                # If not constrained, we still don't want to generate values that are not totally unrealistic
-                
-                low = min(sample.min())
-                
-                high = max(sample.max())
-                
-                generation = np.random.randint(low,high+1, size = (self.Population, nfeats))
-            
-            
+                low = min(sample)
+                high = max(sample)
+                generation = np.random.randint(low, high+1, size=(self.Population, nfeats))
+        
         elif normalisation == 'standard':
             generation = np.random.randn(self.Population, nfeats)
-                
+        
         elif normalisation == 'max_scaler':
             generation = np.random.rand(self.Population, nfeats)
         
         else:
-            raise ValueError('Normalisation option not recognised:\
-                            choose one of "None", "standard" or\
-                                "max_scaler".')
+            raise ValueError('Normalisation option not recognised: choose one of "None", "standard" or "max_scaler".')
         
         if has_cat:
-            
-            assert cat_ids is not None, 'If categorical features are included in the dataset,\
-                the relative cat_ids (to be generated with the generate_cats_ids method) needs\
-                    to be provided to the function.'
-            
+            assert cat_ids is not None, 'If categorical features are included in the dataset, the relative cat_ids (to be generated with the generate_cats_ids method) needs to be provided to the function.'
             generation = pd.DataFrame(generation, columns=sample.columns.tolist())
-            
             for idx, ncat, cat_value in cat_ids:
-                
-                random_indeces = np.random.randint(0, ncat, size = self.Population)
-                
+                random_indeces = np.random.randint(0, ncat, size=self.Population)
                 random_cats = [cat_value[feat] for feat in random_indeces]
-                
                 generation.iloc[:, idx] = random_cats
-                
             distances = self.distance(sample, generation)[0]
-            
         else:
             distances = self.distance(sample, generation)[0]
-            
-            generation = pd.DataFrame(generation, columns=sample.columns.tolist())
+            generation = pd.DataFrame(generation, columns=sample.columns.tolist())  # Set column names here
         
-        # Make sure each column has the same dtype as the sample
-        for col in sample.columns:
-            generation[col] = generation[col].astype(sample[col].dtype)
+        for i in sample:
+            generation[i] = generation[i].astype(sample[i].dtype)
         
         return generation.values.tolist(), distances
                     
@@ -698,90 +590,6 @@ class CERTIFAI:
         '''Generate the counterfactuals for the defined dataset under the
         trained model. The whole process is described in detail in the
         original paper.
-        
-        Arguments:
-            Inputs:
-                model (torch.nn.module, keras.model or sklearn.model): the trained model
-                that will be used to check that original samples and their
-                counterfactuals yield different predictins.
-                
-                x (pandas.DataFrame or numpy.ndarray): the referenced 
-                dataset, i.e. the samples for which creating counterfactuals.
-                If no dataset is provided, the function assumes that the 
-                dataset has been previously provided to the class during
-                instantiation (see above) and that it is therefore contained
-                in the attribute 'tab_dataset'.
-                
-                model_input (torch.tensor or numpy.ndarray): the dataset
-                for which counterfactuals are generated, but having the form
-                required by the trained model to generate predictions based
-                on it. If nothing is provided, the model input will be automatically
-                generated for each dataset's observation (following the torch
-                argument in order to create the correct input).
-                
-                pytorch (bool): whether the passed model is a torch.nn.module
-                instance (if pytorch is set to True) or a keras/sklearn.model one.
-                
-                classification (bool): whether the task of the model is to 
-                classify (classification = True) or to perform regression.
-                
-                generations (int): the number of generations, i.e. how many
-                times the algorithm will run over each data sample in order to 
-                generate the relative counterfactuals. In the original paper, the
-                value of this parameter was found for each separate example via
-                grid search. Computationally, increasing the number of generations
-                linearly increases the time of execution.
-                
-                distance (str): the type of distance function to be used in
-                comparing original samples and counterfactuals. The default
-                is "automatic", meaning that the distance function will be guessed,
-                based on the form of the input data. Other options are 
-                "SSIM" (for images), "L1" or "L2".
-                
-                constrained (bool): whether to constrain the values of each
-                generated feature to be in the range of the observed values
-                for that feature in the original dataset.
-                
-                class_specific (int): if classification is True, this option
-                can be used to further specify that we want to generate 
-                counterfactuals just for samples yielding a particular prediction
-                (whereas the relative integer is the index of the predicted class
-                 according to the trained model). This is useful, e.g., if the 
-                analysis needs to be restricted on data yielding a specific
-                prediction. Default is None, meaning that all data will be used
-                no matter what prediction they yield.
-                
-                select_retain (int): hyperparameter specifying the (max) amount
-                of counterfactuals to be retained after the selection step
-                of the algorithm.
-                
-                gen_retain (int): hyperparameter specifying the (max) amount
-                of counterfactuals to be retained at each generation.
-                
-                final_k (int): hyperparameter specifying the (max) number
-                of counterfactuals to be kept for each data sample.
-                
-                normalisation (str) ["standard", "max_scaler"]: the
-                normalisation technique used for the data at hand. Default
-                is None, while "standard" and "max_scaler" techniques are
-                the other possible options. According to the chosen value
-                different random number generators are used. This option is
-                useful to speed up counterfactuals' generation if the original
-                data underwent some normalisation process or are in some
-                specific range.
-                
-                fixed (list): a list of features to be kept fixed in counterfactual generation 
-                (i.e. all counterfactual will have the same value as the given sample for that
-                feature). If no list is provided, then no feature will be kept fixed.
-            
-                verbose (bool): whether to print the generation status via 
-                a progression bar.
-                
-            Outputs
-                None: the function does not output any value but it populates
-                the result attribute of the instance with a list of tuples each
-                containing the original data sample, the generated  counterfactual(s)
-                for that data sample and their distance(s).
         '''
         cfes = []
         not_found = 0
@@ -807,16 +615,15 @@ class CERTIFAI:
                 self.set_distance(distance, x)
                 
         if model_input is None:
-            # Exclude the last column (target) from the input
-            model_input = self.transform_x_2_input(x.iloc[:, :-1], pytorch=pytorch)
+            model_input = self.transform_x_2_input(x, pytorch = pytorch)
             
-        if torch:
+        if pytorch:
             model.eval()
         
         if self.predictions is None: 
             self.predictions = self.generate_prediction(model, model_input,
-                                                  pytorch=pytorch,
-                                                  classification=classification)
+                                                pytorch=pytorch,
+                                                classification=classification)
         
         if len(x.shape)>2:
             
@@ -836,18 +643,13 @@ class CERTIFAI:
                 cat_ids = self.generate_cats_ids(x)
         
         else:
-             x = pd.DataFrame(x)   
-        
-        
+            x = pd.DataFrame(x)   
         
         if classification and class_specific is not None:
             x = x.iloc[self.predictions == class_specific]
             self.class_specific = class_specific
                 
-                
-               
-        tot_samples = tqdm(range(x.shape[0])) if verbose else range(x.shape[0])
-        
+        tot_samples = tqdm(range(100)) if verbose else range(x.shape[0])
         
         for i in tot_samples:
             
@@ -882,22 +684,22 @@ class CERTIFAI:
                 crossed_generation = self.crossover(mutated_generation, 
                                                     return_df = True)
                 
-                gen_input = self.transform_x_2_input(crossed_generation.iloc[:, :-1],
-                                                     pytorch = pytorch)
+                gen_input = self.transform_x_2_input(crossed_generation,
+                                                    pytorch = pytorch)
                 
                 counter_preds = self.generate_prediction(model,
-                                                         gen_input,
-                                                         pytorch,
-                                                         classification)
+                                                        gen_input,
+                                                        pytorch,
+                                                        classification)
                 
                 diff_prediction = [counter_pred!=self.predictions[i] for
-                                   counter_pred in counter_preds]
+                                counter_pred in counter_preds]
                 
                 final_generation = crossed_generation.loc[diff_prediction]
                 
                 if len(final_generation) == 0:
-                    #if verbose:
-                    print(f"No valid counterfactuals found for sample {i} in generation {g}. Skipping distance calculation.")
+                    if verbose:
+                        print(f"No valid counterfactuals found for sample {i} in generation {g}. Skipping distance calculation.")
                     not_found += 1
                     continue
                 
@@ -922,363 +724,27 @@ class CERTIFAI:
                     start = 0)
             
             self.results.append((sample, counterfacts, list(fitness_dict.values())))
-            cfes.append(counterfacts[0])
         
-        # Save the counterfactuals in a csv file
-        cfes = pd.DataFrame(cfes)
-        cfes.columns = x.columns.tolist()
-        cfes.to_csv('counterfactuals.csv', index=False)
+        # Calculate mean distance and mean sparsity
+        distances = []
+        sparsities = []
+        valid_samples = 0
         
-        print("Number of samples for which no counterfactuals were found: ", not_found)
-        mean_distance = np.array([result[2][0] for result in self.results]).mean()
-        print("Mean distance of the generated counterfactuals from the original sample: ", mean_distance)
-
-        print("Proximity KPI :", proximity_KPI(x, cfes, con, cat))
-        print("Sparsity KPI :",sparsity_KPI(x, cfes))
-            
-            
-    def check_robustness(self, x = None, normalised = False):
-        '''Calculate the Counterfactual-based Explanation for Robustness
-        (CER) score or the normalised CER (NCER) if normalised argument is
-        set to true.
+        con, cat = self.get_con_cat_columns(x)
         
-        Arguments:
-            Inputs:
-                x (pandas.dataframe or numpy.ndarray): the dataset for which
-                the counterfactual were generated
-                
-                normalised (bool): whether to calculate the normalised score
-                or not.
-                
-            Outputs:
-                CERScore (float): a float describing models' robustness (the
-                higher the score, the more robust the model)'''
-                
+        for sample, counterfacts, _ in self.results:
+            if len(counterfacts) > 0:
+                valid_samples += 1
+                for counterfact in counterfacts:
+                    dist = self.calculate_distance(sample.values[0], counterfact, con, cat)
+                    sparsity = self.calculate_sparsity(sample.values[0], counterfact, con, cat)
+                    distances.append(dist)
+                    sparsities.append(sparsity)
         
-        assert self.results is not None, 'To run this method counterfactulals need\
-        to be generated with the generate_counterfactuals method first.'
-        
-        distances = np.array([result[2] for result in self.results])
-        
-        CERScore = distances.mean()
-        
-        if normalised:
-            assert self.predictions is not None, 'To calculate NCER score, predictions\
-                for the dataset are needed: by running generate_counterfactuals method\
-                    they should be automatically generated!'
-            
-            if x is None:
-                assert self.tab_dataset is not None, 'If normalising, the original\
-                    dataset for which the counterfactuals were generated needs to be provided'
-                
-                x = self.tab_dataset
-                
-            
-            elif isinstance(x, np.ndarray):
-                '''If the input is a numpy array (e.g. for an image), we will\
-                    transform it into a pandas dataframe for consistency'''
-                x = pd.DataFrame(x) 
-            
-            if len(self.results) < len(x):
-                x = x.iloc[self.predictions==self.class_specific]
-                predictions = self.predictions[self.predictions==self.class_specific]
-            else:
-                predictions = self.predictions
-            
-            unique_preds, preds_prob = np.unique(predictions, return_counts = True)
-            
-            preds_prob = preds_prob / preds_prob.sum()
-            
-            normalisation_term = 0
-            
-            for index, i in enumerate(unique_preds):
-                
-                current_samples = x.iloc[predictions==i,:]
-                if len(current_samples)>1:
-                    current_expect_distance = np.array(
-                        [self.distance(
-                            current_samples.iloc[i:i+1, :],
-                        current_samples)[0] for i in range(
-                        len(current_samples))]).sum()/(
-                            len(current_samples)**2 -
-                            len(current_samples))
-                        
-                    normalisation_term += current_expect_distance * preds_prob[index]
-                
-            return CERScore/normalisation_term
-        
-        return CERScore
-    
-    
-    def check_fairness(self, control_groups, x = None, 
-                       normalised = False, print_results = False,
-                       visualise_results = False):
-        '''Calculate the fairness of the model for specific subsets of the dataset
-        by comparing the relative CER scores of the different subsets.
-        
-        Arguments:
-            Inputs:
-                control_groups (list of dictionaries): a list containing dictionaries
-                specifying the condition over which to divide the dataset in subsets.
-                Specifically, the key(s) of each dictionary specify a feature of the
-                dataset and the related value is the value that such feature must
-                have in the subset.
-                
-                x (pandas.dataframe or numpy.ndarray): the dataset for which
-                the counterfactual were generated
-                
-                normalised (bool): whether to calculate the normalised score
-                or not.
-                
-                print_results (bool): whether to explicitly print the results (
-                    including which subset is the most robust and which the least)
-                
-                visualise_results (bool): whether to plot the results with a 
-                standard bar chart from matplotlib.
-                
-            Outputs:
-                results (dictionary): a dictionary containing each splitting
-                condition(s) as keys and the relative Robustness scores as values.'''
-                
-        
-        assert self.results is not None, 'To run this method counterfactulals need\
-        to be generated with the generate_counterfactuals method first.'
-        
-        if x is None:
-            assert self.tab_dataset is not None, 'If normalising, the original\
-                dataset for which the counterfactuals were generated needs to be provided'
-            
-            x = self.tab_dataset
-        
-        elif isinstance(x, np.ndarray):
-            '''If the input is a numpy array (e.g. for an image), we will\
-                transform it into a pandas dataframe for consistency'''
-            x = pd.DataFrame(x) 
-        
-        if len(self.results) < len(x):
-            x = x.iloc[self.predictions==self.class_specific]
-            x.reset_index(inplace=True)
-        
-        results = {}
-        
-        for group in control_groups:
-            
-            x_new = x.copy()
-            
-            for feature, condition in group.items():
-                x_new = x_new[x_new[feature]==condition]
-            
-            distances = np.array([result[2] for result in 
-                                  self.results])[x_new.index]
-        
-            CERScore = distances.mean()
-            
-            if normalised:
-                assert self.predictions is not None, 'To calculate NCER score, predictions\
-                    for the dataset are needed: by running generate_counterfactuals method\
-                        they should be automatically generated!'
-                
-                
-                
-                unique_preds, preds_prob = np.unique(self.predictions, return_counts = True)
-                
-                preds_prob = preds_prob / preds_prob.sum()
-                
-                normalisation_term = 0
-                
-                subset_predictions = self.predictions[x_new.index]
-                
-                for index, i in enumerate(unique_preds):
-                    
-                    current_samples = x_new.iloc[subset_predictions==i,:]
-                    
-                    if len(current_samples)>1:
-                        current_expect_distance = np.array(
-                            [self.distance(
-                                current_samples.iloc[i:i+1, :],
-                            current_samples)[0] for i in range(
-                            len(current_samples))]).sum()/(
-                                len(current_samples)**2 -
-                                len(current_samples))
-                            
-                        normalisation_term += current_expect_distance * preds_prob[index]
-                
-                CERScore /= normalisation_term
-            
-            key = '-&-'.join([str(k)+'='+str(v) for k,v in group.items()])
-            
-            results[key] = CERScore
-        
-        CERScores = np.array(list(results.values()))
-        Subsets = np.array(list(results.keys()))
-        
-        if print_results:
-            
-            for k, v in results.items():
-                msg = re.sub('-&-', ' and ', k)
-                
-                
-                print('CERScore for subset of dataset having {} is {}'.format(
-                    msg, v))
-            
-            
-            max_group = Subsets[np.argmax(CERScores)]
-            min_group = Subsets[np.argmin(CERScores)]
-            
-            print('The more robust subset is the one having {}'.format(
-                    re.sub('-&-', ' and ', max_group)))
-            
-            print('The less robust subset is the one having {}\n\
-                  with a difference of {} from the more robust:\n\
-                      the model might underperform for this group'.format(
-                    re.sub('-&-', ' and ', min_group), np.max(CERScores - np.min(CERScores))))
-        
-        if visualise_results:
-            
-            plt.bar(Subsets, CERScores, color = 'red')
-            
-            plt.title('Robustness Score for subsets of the Dataset')
-            
-            plt.xlabel('Subset')
-            
-            plt.ylabel('Robustness Score')
-            
-            if len(Subsets[np.argmax([len(sub) for sub in Subsets])]) + len(Subsets)>25:
-                plt.xticks(rotation=90)
-            
-            plt.show()
-        
-        return results
-    
-    
-    def check_feature_importance(self, x = None, sensibility = 10,
-                                 print_results = False,
-                                 visualise_results = False):
-        '''Check feature importance by counting how many times each feature has
-        been changed to create a counterfactual. For continuous features, the unit
-        denoting a change in the feature value is set to be 1 standard deviation
-        (in the future more options will be added)
-        Arguments:
-            Inputs:
-                x (pandas.dataframe or numpy.ndarray): the dataset for which
-                the counterfactual were generated
-                
-                sensibility (int or dictionary): scaling value for the standard deviations of
-                continuous features. The bigger the sensibility the smaller the
-                interval a counterfactual should lay in to be considered equal to
-                the real sample. Multiple scaling values can be passed so that
-                each continuous feature can have its specific scaling value. In
-                this case, the sensibilities need to be passed in a dictionary
-                having as key the feature/column name of the interested feature
-                and as value the scaling value (i.e. sensibility).
-                
-                print_results (bool): whether to explicitly print the results
-                
-                visualise_results (bool): whether to plot the results with a 
-                standard bar chart from matplotlib.
-        
-        '''
-        
-        assert self.results is not None, 'To run this method counterfactulals need\
-        to be generated with the generate_counterfactuals method first.'
-        
-        if isinstance(self.results[0][0], pd.DataFrame):
-            
-            if x is None:
-                assert self.tab_dataset is not None, 'The original\
-                    dataset for which the counterfactuals were generated needs to be provided'
-                
-                x = self.tab_dataset 
-                
-                cols = x.columns.tolist()
-        
-        elif isinstance(x, np.ndarray):
-            '''If the input is a numpy array (e.g. for an image), we will\
-                transform it into a pandas dataframe for consistency'''
-            x = pd.DataFrame(x)    
-            
-            cols = x.columns.tolist()
-        
-        if len(self.results) < len(x):
-            x = x.iloc[self.predictions==self.class_specific]
-        
-        if isinstance(sensibility, int):
-            sensibility = {k:sensibility for k in cols}
-        
-        nfeats = x.shape[1]
-        
-        importances = [0 for i in range(nfeats)]
-        
-        std = x.describe(include='all').loc['std'].values
-        
-        counterfactuals = np.array([result[1] for result in self.results])
-        
-        ncounterfacts = counterfactuals.shape[1]
-        
-        counterfactuals = counterfactuals.reshape(-1, nfeats)
-        
-        if x.shape[0]==counterfactuals.shape[0]:
-            for index, feature in enumerate(x):
-                if np.isnan(std[index]):
-                    importances[index] = (x[feature].values !=
-                                          counterfactuals[:,index]).sum()
-                else:
-                    importances[index] = len(x)-((x[feature].values - std[index]/sensibility[feature]<
-                                          counterfactuals[:,index].astype(
-                                          x[feature].dtype)) & (
-                                          counterfactuals[:,index].astype(
-                                          x[feature].dtype)<
-                                          x[feature].values + std[index]/sensibility[feature])).sum()
-        
+        if valid_samples > 0:
+            mean_distance = np.mean(distances) if distances else 0.0
+            mean_sparsity = np.mean(sparsities) if sparsities else 0.0
+            print(f"Mean Distance: {mean_distance:.4f} (across {valid_samples} samples with valid counterfactuals)")
+            print(f"Mean Sparsity: {mean_sparsity:.4f} features changed (across {valid_samples} samples with valid counterfactuals)")
         else:
-            new_x = np.repeat(x.iloc[0,:].values.reshape(1, -1), 
-                              ncounterfacts, axis = 0)
-            
-            for i in range(1, len(x)):
-                new_x = np.concatenate((new_x, np.repeat(
-                    x.iloc[i,:].values.reshape(1, -1), 
-                    ncounterfacts, axis = 0)))
-                
-            for index, feature in enumerate(x):
-                if np.isnan(std[index]):
-                    importances[index] = (new_x[:,index] !=
-                                          counterfactuals[:,index]).sum()
-                else:
-                    importances[index] = len(new_x)-((new_x[:,index].astype(
-                                          x[feature].dtype) -
-                                          std[index]/sensibility[feature]<
-                                          counterfactuals[:,index].astype(
-                                          x[feature].dtype)) & (
-                                          counterfactuals[:,index].astype(
-                                          x[feature].dtype)<
-                                          new_x[:,index].astype(
-                                          x[feature].dtype) +
-                                          std[index]/sensibility[feature])).sum()
-        
-        results = {col:importances[index] for index, col in enumerate(cols)}
-        if print_results:
-            
-            for k, v in results.items():
-                print('Feature {} importance is {}'.format(
-                    k, v))
-            
-            
-            
-        
-        if visualise_results:
-            
-            plt.bar(np.array(cols), np.array(importances), color = 'red')
-            
-            plt.title('Importance of Features in the Model\n\
-                      (by number of times the feature get changed in a counterfactual)')
-            
-            plt.xlabel('Feature')
-            
-            plt.ylabel('Count of Change in Counterfactuals')
-            
-            if len(cols[np.argmax([len(feat) for feat in cols])]) + len(cols)>30:
-                plt.xticks(rotation=90)
-            
-            plt.show()
-        
-        return results
+            print("No valid counterfactuals found for any samples.")

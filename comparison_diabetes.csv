@@ -1,0 +1,4 @@
+Model,Coverage,Distance,Sparsity,Time
+CERTIFAI,100,97.12,8.31,48s
+PPO,100,62.56,1.39,6.3s
+DiCE,58,323.45,3.36,41s

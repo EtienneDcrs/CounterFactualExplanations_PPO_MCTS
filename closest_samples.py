@@ -2,16 +2,21 @@ import numpy as np
 import pandas as pd
 import pickle
 
-def calculate_distance_simple(a, b, dataset, feature_order):
-    total_distance = 0.0
-    for i, col in enumerate(feature_order):
-        if pd.api.types.is_numeric_dtype(dataset[col]):
-            # Numerical: absolute difference
-            total_distance += max(float(a[i]) / float(b[i]), float(b[i]) / float(a[i])) if a[i] != 0 and b[i] != 0 else abs(float(a[i]) - float(b[i]))
+def calculate_distance(original_features, modified_features):
+    """
+    Calculate L1 (Manhattan) distance between encoded original and modified features.
+    """
+    categorical_indices = []
+    for i, feature in enumerate(original_features):
+        if isinstance(feature, str) or isinstance(feature, bool):
+            categorical_indices.append(i)
+    dist = 0
+    for i, (o, m) in enumerate(zip(original_features, modified_features)):
+        if i in categorical_indices:
+            dist += float(o != m)  # 1 if changed
         else:
-            # Categorical: 1 if different, 0 if same
-            total_distance += 0 if a[i] == b[i] else 1
-    return total_distance
+            dist += abs(o - m)
+    return dist
 
 def get_closest_samples(input_sample, dataset, X=5, require_different_outcome=True, show_diff_only=False):
     feature_order = list(dataset.columns[:-1])  # Exclude target
@@ -20,15 +25,15 @@ def get_closest_samples(input_sample, dataset, X=5, require_different_outcome=Tr
 
     input_outcome = input_sample[-1] 
     input_features = input_sample[:-1]
-    print(f"Input outcome: {input_outcome}, original sample: {input_sample}")
+    #print(f"Input outcome: {input_outcome}, original sample: {input_sample}")
 
     distances = []
     for idx, row in dataset.iterrows():
         sample_features = row[feature_order].values
-        dist = calculate_distance_simple(input_features, sample_features, dataset, feature_order)
+        dist = calculate_distance(input_features, sample_features)
         # Only keep samples with a different outcome if required
         if not require_different_outcome or row[target_col] != input_outcome:
-            print(f"Sample {idx}: Distance={dist}, Outcome={row[target_col]}, original={input_outcome}")
+            #print(f"Sample {idx}: Distance={dist}, Outcome={row[target_col]}, original={input_outcome}")
             distances.append((idx, dist, row[target_col], sample_features))
     distances.sort(key=lambda x: x[1])
     closest = distances[:X]
@@ -59,7 +64,7 @@ def get_closest_samples(input_sample, dataset, X=5, require_different_outcome=Tr
     else:
         result_df = pd.concat([original_df, closest_samples], ignore_index=True)
     result_df.to_csv('original_and_closest_samples.csv', index=False)
-    print(f"Original and closest {X} samples (with different outcome={require_different_outcome}) saved to 'original_and_closest_samples.csv'")
+    #wprint(f"Original and closest {X} samples (with different outcome={require_different_outcome}) saved to 'original_and_closest_samples.csv'")
     return closest_samples
 
 if __name__ == "__main__":

@@ -1,0 +1,8 @@
+Model,Coverage,Distance,Sparsity,Time
+CERTIFAI,100,31697,12.76,3m17s
+PPO,100,10822,4.53,28s
+,,,,
+,,,,
+DiCE,100,23.42,1.92,1m34s
+PPO(Avg),99,15.13,2.75,11.1s
+PPO(Best),100,13.55,2.63,10.84s

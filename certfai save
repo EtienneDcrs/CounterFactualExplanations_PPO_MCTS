@@ -1,0 +1,17 @@
+        total_distance = 0
+        total_sparsity = 0
+        for result in self.results:
+            original_sample = result[0].values.flatten()
+            counterfactual = result[1][0]
+            cfe_dist = self.calculate_distance(original_sample, counterfactual)
+            num_modified_features = sum(1 for o, m in zip(original_sample, counterfactual) if o != m)
+
+            total_sparsity += num_modified_features
+            total_distance += cfe_dist
+        mean_distance = total_distance / len(self.results) if self.results else 0
+        mean_sparsity = total_sparsity / len(self.results) if self.results else 0
+        if verbose:
+            print(f"Mean distance of counterfactuals from original samples: {mean_distance:.4f}")
+            print(f"Mean sparsity of counterfactuals (number of modified features): {mean_sparsity:.4f}")
+            print(f"Number of samples with no valid counterfactuals: {not_found}")
+            

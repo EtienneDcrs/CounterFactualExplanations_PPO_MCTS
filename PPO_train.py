@@ -9,6 +9,7 @@ from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 from tqdm import tqdm
 from closest_samples import get_closest_samples
+from evaluate import Evaluate
 
 from PPO_env import PPOEnv, PPOMonitorCallback
 from Classifier_model import Classifier, evaluate_model_on_full_dataset, train_model
@@ -205,6 +206,26 @@ def train_ppo_for_counterfactuals(dataset_path, model_path=None, logs_dir='ppo_l
     
     return model, env
 
+def calculate_actionability(original_features, counterfactual_features, constraints, feature_columns):
+    """
+    Calculate actionability score for a counterfactual based on constraints.
+    Returns 1 if all fixed features are unchanged, 0 otherwise.
+    
+    Returns:
+    --------
+    int
+        Actionability score (1 if all fixed features unchanged, 0 otherwise)
+    """
+    if not constraints:
+        return 1  # If no constraints, assume actionable
+    
+    for feature, constraint in constraints.items():
+        if constraint == "fixed":
+            idx = feature_columns.index(feature)
+            if original_features[idx] != counterfactual_features[idx]:
+                return 0
+    return 1
+
 def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None, 
                             specific_indices=None, max_steps_per_sample=100,
                             batch_size=None, use_mcts=False, mcts_simulations=10):
@@ -295,7 +316,7 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
         env.current_instance_idx = idx
         success = False
         tries = 0
-        max_tries = 5
+        max_tries = 10
         best_info = None
         total_steps_for_sample = 0
         
@@ -324,12 +345,20 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
                     success = True
                     success_count += 1
                     best_info = info
-                    #print(f"Counterfactual found for sample {i+1} in {steps} steps on try {tries+1}")
+                    cfe = np.concatenate((info['modified_features'], [info['modified_prediction']]))
+                    closest_sample = get_closest_samples(cfe, original_data, X=5, require_different_outcome=False).iloc[0]
+                    diversity = calculate_distance(cfe[:-1], closest_sample[:-1])
+                    best_info['diversity'] = diversity
+                    best_info['actionability'] = calculate_actionability(original_features, info['modified_features'], env.constraints, feature_columns)
                     break
             
             if not success:
-                #print(f"Counterfactual not found for sample {i+1} after {steps} steps on try {tries+1}")
                 best_info = info  # Store the last attempt's info for failed cases
+                cfe = np.concatenate((info['modified_features'], [info['modified_prediction']]))
+                closest_sample = get_closest_samples(cfe, original_data, X=5, require_different_outcome=False).iloc[0]
+                diversity = calculate_distance(cfe[:-1], closest_sample[:-1])
+                best_info['diversity'] = diversity 
+                best_info['actionability'] = calculate_actionability(original_features, info['modified_features'], env.constraints, feature_columns)
             
             tries += 1
         
@@ -342,6 +371,8 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
             'original_prediction': original_prediction,
             'counterfactual_prediction': best_info['modified_prediction'] if best_info else original_prediction,
             'distance': best_info['distance'] if best_info else float('inf'),
+            'diversity': best_info['diversity'] if best_info else float('inf'),
+            'actionability': best_info['actionability'] if best_info else 0,
             'steps': total_steps_for_sample,
             'tries': tries,
             'success': success
@@ -362,11 +393,13 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
     # Final statistics
     success_rate = success_count / num_samples
     mean_distance = np.mean([cf['distance'] for cf in counterfactuals]) if counterfactuals else 0
-    avg_steps = total_steps / success_count if success_count > 0 else 0
+    mean_diversity = np.mean([cf['diversity'] for cf in counterfactuals]) if counterfactuals else 0
+    mean_actionability = np.mean([cf['actionability'] for cf in counterfactuals]) if counterfactuals else 0
     print(f"\nFinal statistics:")
     print(f"Success rate: {success_rate:.2%} ({success_count}/{num_samples})")
     print(f"Mean distance of counterfactuals: {mean_distance:.2f}")
-    print(f"Average steps per successful counterfactual: {avg_steps:.2f}")
+    print(f"Mean diversity of counterfactuals: {mean_diversity:.2f}")
+    print(f"Actionability of counterfactuals: {mean_actionability*100:.2f}%")
     print(f"Total time: {time.time() - start_time:.2f} seconds")
     
     # Calculate and print KPIs if successful counterfactuals were found
@@ -381,13 +414,7 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
             else:
                 categorical_features.append(col)
         
-        try:
-            # Calculate proximity
-            proximity = proximity_KPI(original_df, counterfactual_df, 
-                                     con=continuous_features, 
-                                     cat=categorical_features)
-            print(f"Proximity KPI: {proximity}")
-            
+        try:            
             # Calculate sparsity
             sparsity = sparsity_KPI(original_df, counterfactual_df)
             print(f"Sparsity KPI: {sparsity}")
@@ -488,7 +515,7 @@ def generate_multiple_counterfactuals_for_sample(ppo_model, env, dataset_path, s
     start_time = time.time()
     
     env.current_instance_idx = sample_index
-    max_tries = 5
+    max_tries = 10
     
     for cf_idx in tqdm(range(num_counterfactuals), desc=f"Generating counterfactuals for sample {sample_index}"):
         success = False
@@ -519,10 +546,23 @@ def generate_multiple_counterfactuals_for_sample(ppo_model, env, dataset_path, s
                     success = True
                     success_count += 1
                     best_info = info
+                    cfe = np.concatenate((info['modified_features'], [info['modified_prediction']]))
+                    closest_sample = get_closest_samples(cfe, original_data, X=5, require_different_outcome=False).iloc[0]
+                    print(closest_sample)
+                    print(f"\nOriginal sample: {original_features}\nCounterfactual: {cfe[:-1]}\nClosest sample: {closest_sample[:-1]}")
+                    diversity = calculate_distance(cfe[:-1], closest_sample[:-1])
+                    print(f"Counterfactual distance: {info['distance']}, Closest sample distance: {diversity}")
+                    best_info['diversity'] = diversity
+                    best_info['actionability'] = calculate_actionability(original_features, info['modified_features'], env.constraints, feature_columns)
                     break
             
             if not success:
                 best_info = info  # Store the last attempt's info for failed cases
+                cfe = np.concatenate((info['modified_features'], [info['modified_prediction']]))
+                closest_sample = get_closest_samples(cfe, original_data, X=5, require_different_outcome=False).iloc[0]
+                diversity = calculate_distance(cfe[:-1], closest_sample[:-1])
+                best_info['diversity'] = diversity
+                best_info['actionability'] = calculate_actionability(original_features, info['modified_features'], env.constraints, feature_columns)
             
             tries += 1
         
@@ -536,6 +576,8 @@ def generate_multiple_counterfactuals_for_sample(ppo_model, env, dataset_path, s
             'original_prediction': original_prediction,
             'counterfactual_prediction': best_info['modified_prediction'] if best_info else original_prediction,
             'distance': best_info['distance'] if best_info else float('inf'),
+            'diversity': best_info['diversity'] if best_info else float('inf'),
+            'actionability': best_info['actionability'] if best_info else 0,
             'steps': total_steps_for_sample,
             'tries': tries,
             'success': success
@@ -551,10 +593,14 @@ def generate_multiple_counterfactuals_for_sample(ppo_model, env, dataset_path, s
     # Final statistics
     success_rate = success_count / num_counterfactuals if num_counterfactuals > 0 else 0
     mean_distance = np.mean([cf['distance'] for cf in counterfactuals]) if counterfactuals else 0
+    mean_diversity = np.mean([cf['diversity'] for cf in counterfactuals]) if counterfactuals else 0
+    mean_actionability = np.mean([cf['actionability'] for cf in counterfactuals]) if counterfactuals else 0
     avg_steps = total_steps / success_count if success_count > 0 else 0
     print(f"\nFinal statistics for sample {sample_index}:")
     print(f"Success rate: {success_rate:.2%} ({success_count}/{num_counterfactuals})")
     print(f"Mean distance of counterfactuals: {mean_distance:.2f}")
+    print(f"Mean diversity of counterfactuals: {mean_diversity:.2f}")
+    print(f"Mean actionability of counterfactuals: {mean_actionability:.2f}")
     print(f"Average steps per successful counterfactual: {avg_steps:.2f}")
     print(f"Total time: {time.time() - start_time:.2f} seconds")
     
@@ -593,6 +639,22 @@ def generate_multiple_counterfactuals_for_sample(ppo_model, env, dataset_path, s
     env.use_random_sampling = True
     return counterfactuals, original_df, counterfactual_df
 
+def calculate_distance(original_features, modified_features):
+    """
+    Calculate L1 (Manhattan) distance between encoded original and modified features.
+    """
+    categorical_indices = []
+    for i, feature in enumerate(original_features):
+        if isinstance(feature, str) or isinstance(feature, bool):
+            categorical_indices.append(i)
+    dist = 0
+    for i, (o, m) in enumerate(zip(original_features, modified_features)):
+        if i in categorical_indices:
+            dist += float(o != m)  # 1 if changed
+        else:
+            dist += abs(o - m)
+    return dist
+
 def _save_multiple_counterfactuals(counterfactuals, original_data, save_path):
     """Helper function to save multiple counterfactuals for a single sample to CSV"""
     counterfactual_data = []
@@ -604,6 +666,7 @@ def _save_multiple_counterfactuals(counterfactuals, original_data, save_path):
             'original_prediction': cf['original_prediction'],
             'counterfactual_prediction': cf['counterfactual_prediction'],
             'distance': cf['distance'],
+            'actionability': cf['actionability'],
             'steps': cf['steps']
         }
         
@@ -629,6 +692,7 @@ def _save_counterfactuals(counterfactuals, original_data, save_path):
             'original_prediction': cf['original_prediction'],
             'counterfactual_prediction': cf['counterfactual_prediction'],
             'distance': cf['distance'],
+            'actionability': cf['actionability'],
             'steps': cf['steps']
         }
         
@@ -646,22 +710,27 @@ def _save_counterfactuals(counterfactuals, original_data, save_path):
   
     return counterfactuals
 
-TOTAL_TIMESTEPS = 000  # Total timesteps for training
+TOTAL_TIMESTEPS = 00000  # Total timesteps for training
 
 def main():
     # Specify the dataset path
     #dataset_path = 'data/drug200.csv'
-    dataset_path = 'data/diabetes.csv'
-    dataset_path = 'data/breast_cancer.csv'
     dataset_path = 'data/bank.csv'
+    dataset_path = 'data/breast_cancer.csv'
+    dataset_path = 'data/diabetes.csv'
     dataset_path = 'data/adult.csv'
+    dataset_path = 'data/adult_2.csv'
     
     # Define constraints for features
     constraints = {
-        "race": "fixed",
-        "sex": "fixed",
-        "age": "increase",
-        "native-country": "fixed"
+        "age": "increase",  # Increase age
+        "sex": "fixed"
+        # "fnlwgt": "fixed",
+        # "education-num": "fixed",
+        # "relationship": "fixed",
+        # "native-country": "fixed",
+        # "capital-gain": "fixed",
+        # "capital-loss": "fixed",
     }
     
     # Create logs and model directories
@@ -687,28 +756,28 @@ def main():
         # Take the first 100 samples from the dataset
         indices_to_use = list(range(100))
 
-        # Generate counterfactuals - with standard PPO
-        # print("Generating counterfactuals using standard PPO...")
-        # counterfactuals_ppo, _, _ = generate_counterfactuals(
-        #     ppo_model=ppo_model,
-        #     env=env,
-        #     dataset_path=dataset_path,
-        #     save_path=f'data/generated_counterfactuals_ppo_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv',
-        #     max_steps_per_sample=100,
-        #     use_mcts=False,
-        #     specific_indices=indices_to_use
-        # )
-
-        generate_multiple_counterfactuals_for_sample(
+        #Generate counterfactuals - with standard PPO
+        print("Generating counterfactuals using standard PPO...")
+        counterfactuals_ppo, _, _ = generate_counterfactuals(
             ppo_model=ppo_model,
             env=env,
             dataset_path=dataset_path,
-            sample_index=0,  # Change this to the index of the sample you want to generate multiple counterfactuals for
-            num_counterfactuals=25,
-            save_path=f'data/multiple_counterfactuals_sample_0.csv',
+            save_path=f'data/generated_counterfactuals_ppo_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv',
             max_steps_per_sample=100,
-            use_mcts=False
+            use_mcts=False,
+            specific_indices=indices_to_use
         )
+
+        # generate_multiple_counterfactuals_for_sample(
+        #     ppo_model=ppo_model,
+        #     env=env,
+        #     dataset_path=dataset_path,
+        #     sample_index=0,  # Change this to the index of the sample you want to generate multiple counterfactuals for
+        #     num_counterfactuals=25,
+        #     save_path=f'data/multiple_counterfactuals_sample_0.csv',
+        #     max_steps_per_sample=100,
+        #     use_mcts=False
+        # )
 
 if __name__ == "__main__":
     main()

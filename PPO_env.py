@@ -283,9 +283,9 @@ class PPOEnv(gym.Env):
         confidence_reward = 10 - 10 * original_class_prob  # Higher reward for lower confidence
         
         # Number of features modified
-        num_modified_features = sum(1 for o, m in zip(self.original_features, self.modified_features) if o != m)
+        #num_modified_features = sum(1 for o, m in zip(self.original_features, self.modified_features) if o != m)
         # Reward based on number of features modified
-        num_features_reward = 0 * num_modified_features if counterfactual_found else 0.0
+        num_features_reward = 0 #* num_modified_features if counterfactual_found else 0.0
 
         # Counterfactual bonus
         counterfactual_bonus = 100.0 if counterfactual_found else 0.0
