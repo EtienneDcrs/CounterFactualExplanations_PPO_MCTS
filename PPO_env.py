@@ -163,8 +163,8 @@ class PPOEnv(gym.Env):
         """
         # Increment step counter
         self.steps_taken += 1
-        randomisation_threshold = 40  # Threshold for randomization
         
+        randomisation_threshold = 40  # Threshold for randomization
         # Compute temperature for action randomization
         if self.steps_taken < randomisation_threshold:
             temperature = 0.05  # Low temperature: trust the policy
@@ -226,8 +226,6 @@ class PPOEnv(gym.Env):
             probs: Modified action probabilities
         """
         # Get the PPO model's action logits (unnormalized probabilities)
-        # Note: This requires access to the model's policy, which isn't directly exposed in stable_baselines3
-        # As a workaround, we assume the provided action is the most likely and soften the distribution
         n_actions = self.action_space.n
         probs = np.ones(n_actions) / n_actions  # Start with uniform distribution
         probs[action] += 1.0  # Bias toward the suggested action
@@ -283,15 +281,12 @@ class PPOEnv(gym.Env):
         confidence_reward = 10 - 10 * original_class_prob  # Higher reward for lower confidence
         
         # Number of features modified
-        #num_modified_features = sum(1 for o, m in zip(self.original_features, self.modified_features) if o != m)
-        # Reward based on number of features modified
-        num_features_reward = 0 #* num_modified_features if counterfactual_found else 0.0
 
         # Counterfactual bonus
         counterfactual_bonus = 100.0 if counterfactual_found else 0.0
         
         # Total reward
-        reward = confidence_reward + num_features_reward + counterfactual_bonus
+        reward = confidence_reward + counterfactual_bonus
         return reward
 
     def apply_action(self, action_idx):

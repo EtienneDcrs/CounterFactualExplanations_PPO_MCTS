@@ -1,7 +1,7 @@
 age,workclass,education,marital-status,occupation,race,sex,hours-per-week,distance,income
-74, Without-pay, Some-college, Married-AF-spouse, Tech-support, White, Female,36,0.0,1
-73, Private, HS-grad, Widowed, Other-service, White, Female,37,6.0, <=50K
-75, Private, Some-college, Married-civ-spouse, Exec-managerial, White, Male,35,6.0, >50K
-75, Self-emp-not-inc, Prof-school, Married-civ-spouse, Prof-specialty, White, Male,35,7.0, <=50K
-74, Self-emp-inc, Some-college, Widowed, Exec-managerial, White, Male,40,8.0, <=50K
-71, Self-emp-not-inc, HS-grad, Widowed, Adm-clerical, White, Female,35,8.0, <=50K
+43, State-gov, 9th, Married-civ-spouse, Armed-Forces, Asian-Pac-Islander, Female,41,0.0,1
+43, State-gov, Assoc-voc, Married-civ-spouse, Prof-specialty, White, Female,40,4.0, >50K
+43, Private, 5th-6th, Married-civ-spouse, Machine-op-inspct, Asian-Pac-Islander, Female,40,4.0, >50K
+43, State-gov, Some-college, Married-civ-spouse, Craft-repair, White, Male,40,5.0, <=50K
+44, State-gov, HS-grad, Married-civ-spouse, Prof-specialty, White, Female,40,5.0, >50K
+43, State-gov, HS-grad, Married-civ-spouse, Protective-serv, White, Male,40,5.0, <=50K

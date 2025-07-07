@@ -211,6 +211,17 @@ def calculate_actionability(original_features, counterfactual_features, constrai
     Calculate actionability score for a counterfactual based on constraints.
     Returns 1 if all fixed features are unchanged, 0 otherwise.
     
+    Parameters:
+    -----------
+    original_features : array-like
+        Original feature values
+    counterfactual_features : array-like
+        Counterfactual feature values
+    constraints : dict
+        Dictionary of feature constraints (e.g., {"age": "increase", "sex": "fixed"})
+    feature_columns : list
+        List of feature column names
+    
     Returns:
     --------
     int
@@ -225,6 +236,93 @@ def calculate_actionability(original_features, counterfactual_features, constrai
             if original_features[idx] != counterfactual_features[idx]:
                 return 0
     return 1
+
+def get_metrics(original_df, counterfactual_df, counterfactuals, constraints, feature_columns, original_data, verbose=True):
+    """
+    Calculate KPIs for generated counterfactuals.
+    
+    Parameters:
+    -----------
+    original_df : pd.DataFrame
+        DataFrame of original samples
+    counterfactual_df : pd.DataFrame
+        DataFrame of counterfactual samples
+    counterfactuals : list
+        List of dictionaries containing counterfactual information
+    constraints : dict
+        Dictionary of feature constraints
+    feature_columns : list
+        List of feature column names
+    original_data : pd.DataFrame
+        Original dataset for diversity calculation
+    
+    Returns:
+    --------
+    tuple: (coverage, distance, diversity, sparsity, actionability)
+        - coverage: Proportion of successful counterfactuals
+        - distance: Mean distance of counterfactuals
+        - diversity: Mean diversity of counterfactuals
+        - sparsity: Sparsity KPI
+        - actionability: Mean actionability of counterfactuals
+    """
+    if verbose:
+        print(f"Calculating KPIs for {len(counterfactuals)} counterfactuals...")
+        print("Calculating coverage...")
+    if not counterfactuals:
+        print("No counterfactuals generated. Returning default KPIs.")
+        return 0, 0, 0, 0, 0
+    # Calculate coverage (success rate)
+    success_count = sum(cf['success'] for cf in counterfactuals)
+    num_samples = len(counterfactuals)
+    coverage = success_count / num_samples if num_samples > 0 else 0
+    
+    if verbose:
+        print(f"Coverage : {coverage:.2%} ({success_count}/{num_samples})")
+        print("Calculating mean distance...")
+    # Calculate mean distance
+    distance = np.mean([cf['distance'] for cf in counterfactuals]) if counterfactuals else 0
+    
+    if verbose:
+        print(f"Mean distance of counterfactuals: {distance:.2f}")
+        print("Calculating mean diversity...")
+    # Calculate diversity
+    diversity_scores = []
+    for idx, cf in enumerate(counterfactuals):
+        if cf['counterfactual_features'] is not None:
+            cfe = np.concatenate((cf['counterfactual_features'], [cf['counterfactual_prediction']]))
+            closest_sample = get_closest_samples(cfe, original_data, X=5, require_different_outcome=False).iloc[0]
+            diversity_scores.append(calculate_distance(cfe[:-1], closest_sample[:-1]))
+    diversity = np.mean(diversity_scores) if diversity_scores else 0
+    
+    if verbose:
+        print(f"Mean diversity of counterfactuals: {diversity:.2f}")
+        print("Calculating mean sparsity...")
+    # Calculate sparsity
+    try:
+        sparsity = sparsity_KPI(original_df, counterfactual_df)
+    except ImportError:
+        print("KPIs module not found - skipping sparsity calculation")
+        sparsity = 0
+    
+    if verbose:
+        print(f"Sparsity KPI: {sparsity}")
+        print("Calculating actionability...")
+    # Calculate actionability
+    actionability_scores = []
+    for idx, cf in enumerate(counterfactuals):
+        if cf['counterfactual_features'] is not None:
+            actionability_scores.append(
+                calculate_actionability(
+                    cf['original_features'],
+                    cf['counterfactual_features'],
+                    constraints,
+                    feature_columns
+                )
+            )
+    actionability = np.mean(actionability_scores) if actionability_scores else 0
+    if verbose:
+        print(f"Mean actionability of counterfactuals: {actionability:.2f}")
+    return coverage, distance, diversity, sparsity, actionability
 
 def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None, 
                             specific_indices=None, max_steps_per_sample=100,
@@ -345,20 +443,10 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
                     success = True
                     success_count += 1
                     best_info = info
-                    cfe = np.concatenate((info['modified_features'], [info['modified_prediction']]))
-                    closest_sample = get_closest_samples(cfe, original_data, X=5, require_different_outcome=False).iloc[0]
-                    diversity = calculate_distance(cfe[:-1], closest_sample[:-1])
-                    best_info['diversity'] = diversity
-                    best_info['actionability'] = calculate_actionability(original_features, info['modified_features'], env.constraints, feature_columns)
                     break
             
             if not success:
                 best_info = info  # Store the last attempt's info for failed cases
-                cfe = np.concatenate((info['modified_features'], [info['modified_prediction']]))
-                closest_sample = get_closest_samples(cfe, original_data, X=5, require_different_outcome=False).iloc[0]
-                diversity = calculate_distance(cfe[:-1], closest_sample[:-1])
-                best_info['diversity'] = diversity 
-                best_info['actionability'] = calculate_actionability(original_features, info['modified_features'], env.constraints, feature_columns)
             
             tries += 1
         
@@ -371,8 +459,6 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
             'original_prediction': original_prediction,
             'counterfactual_prediction': best_info['modified_prediction'] if best_info else original_prediction,
             'distance': best_info['distance'] if best_info else float('inf'),
-            'diversity': best_info['diversity'] if best_info else float('inf'),
-            'actionability': best_info['actionability'] if best_info else 0,
             'steps': total_steps_for_sample,
             'tries': tries,
             'success': success
@@ -390,36 +476,19 @@ def generate_counterfactuals(ppo_model, env, dataset_path, save_path=None,
     original_df = pd.DataFrame(original_samples, columns=feature_columns)
     counterfactual_df = pd.DataFrame(counterfactual_samples, columns=feature_columns)
     
-    # Final statistics
-    success_rate = success_count / num_samples
-    mean_distance = np.mean([cf['distance'] for cf in counterfactuals]) if counterfactuals else 0
-    mean_diversity = np.mean([cf['diversity'] for cf in counterfactuals]) if counterfactuals else 0
-    mean_actionability = np.mean([cf['actionability'] for cf in counterfactuals]) if counterfactuals else 0
-    print(f"\nFinal statistics:")
-    print(f"Success rate: {success_rate:.2%} ({success_count}/{num_samples})")
-    print(f"Mean distance of counterfactuals: {mean_distance:.2f}")
-    print(f"Mean diversity of counterfactuals: {mean_diversity:.2f}")
-    print(f"Actionability of counterfactuals: {mean_actionability*100:.2f}%")
-    print(f"Total time: {time.time() - start_time:.2f} seconds")
-    
-    # Calculate and print KPIs if successful counterfactuals were found
+    # Calculate and print KPIs
     if len(counterfactuals) > 0:
-        # Determine continuous and categorical features
-        continuous_features = []
-        categorical_features = []
-        
-        for col in feature_columns:
-            if pd.api.types.is_numeric_dtype(original_df[col]):
-                continuous_features.append(col)
-            else:
-                categorical_features.append(col)
-        
-        try:            
-            # Calculate sparsity
-            sparsity = sparsity_KPI(original_df, counterfactual_df)
-            print(f"Sparsity KPI: {sparsity}")
-        except ImportError:
-            print("KPIs module not found - skipping KPI calculation")
+        coverage, distance, diversity, sparsity, actionability = get_metrics(
+            original_df, counterfactual_df, counterfactuals, env.constraints, feature_columns, original_data
+        )
+        print(f"\nFinal statistics:")
+        print(f"Coverage (success rate): {coverage:.2%} ({success_count}/{num_samples})")
+        print(f"Mean distance of counterfactuals: {distance:.2f}")
+        print(f"Mean diversity of counterfactuals: {diversity:.2f}")
+        print(f"Sparsity KPI: {sparsity}")
+        print(f"Mean actionability of counterfactuals: {actionability:.2f}")
+    
+    print(f"Total time: {time.time() - start_time:.2f} seconds")
     
     # Save counterfactuals if a save path is provided
     if save_path and counterfactuals:
@@ -546,23 +615,10 @@ def generate_multiple_counterfactuals_for_sample(ppo_model, env, dataset_path, s
                     success = True
                     success_count += 1
                     best_info = info
-                    cfe = np.concatenate((info['modified_features'], [info['modified_prediction']]))
-                    closest_sample = get_closest_samples(cfe, original_data, X=5, require_different_outcome=False).iloc[0]
-                    print(closest_sample)
-                    print(f"\nOriginal sample: {original_features}\nCounterfactual: {cfe[:-1]}\nClosest sample: {closest_sample[:-1]}")
-                    diversity = calculate_distance(cfe[:-1], closest_sample[:-1])
-                    print(f"Counterfactual distance: {info['distance']}, Closest sample distance: {diversity}")
-                    best_info['diversity'] = diversity
-                    best_info['actionability'] = calculate_actionability(original_features, info['modified_features'], env.constraints, feature_columns)
                     break
             
             if not success:
                 best_info = info  # Store the last attempt's info for failed cases
-                cfe = np.concatenate((info['modified_features'], [info['modified_prediction']]))
-                closest_sample = get_closest_samples(cfe, original_data, X=5, require_different_outcome=False).iloc[0]
-                diversity = calculate_distance(cfe[:-1], closest_sample[:-1])
-                best_info['diversity'] = diversity
-                best_info['actionability'] = calculate_actionability(original_features, info['modified_features'], env.constraints, feature_columns)
             
             tries += 1
         
@@ -576,8 +632,6 @@ def generate_multiple_counterfactuals_for_sample(ppo_model, env, dataset_path, s
             'original_prediction': original_prediction,
             'counterfactual_prediction': best_info['modified_prediction'] if best_info else original_prediction,
             'distance': best_info['distance'] if best_info else float('inf'),
-            'diversity': best_info['diversity'] if best_info else float('inf'),
-            'actionability': best_info['actionability'] if best_info else 0,
             'steps': total_steps_for_sample,
             'tries': tries,
             'success': success
@@ -590,41 +644,20 @@ def generate_multiple_counterfactuals_for_sample(ppo_model, env, dataset_path, s
     original_df = pd.DataFrame(original_samples, columns=feature_columns)
     counterfactual_df = pd.DataFrame(counterfactual_samples, columns=feature_columns)
     
-    # Final statistics
-    success_rate = success_count / num_counterfactuals if num_counterfactuals > 0 else 0
-    mean_distance = np.mean([cf['distance'] for cf in counterfactuals]) if counterfactuals else 0
-    mean_diversity = np.mean([cf['diversity'] for cf in counterfactuals]) if counterfactuals else 0
-    mean_actionability = np.mean([cf['actionability'] for cf in counterfactuals]) if counterfactuals else 0
-    avg_steps = total_steps / success_count if success_count > 0 else 0
-    print(f"\nFinal statistics for sample {sample_index}:")
-    print(f"Success rate: {success_rate:.2%} ({success_count}/{num_counterfactuals})")
-    print(f"Mean distance of counterfactuals: {mean_distance:.2f}")
-    print(f"Mean diversity of counterfactuals: {mean_diversity:.2f}")
-    print(f"Mean actionability of counterfactuals: {mean_actionability:.2f}")
-    print(f"Average steps per successful counterfactual: {avg_steps:.2f}")
-    print(f"Total time: {time.time() - start_time:.2f} seconds")
-    
-    # Calculate and print KPIs if successful counterfactuals were found
+    # Calculate and print KPIs
     if len(counterfactuals) > 0:
-        continuous_features = []
-        categorical_features = []
-        
-        for col in feature_columns:
-            if pd.api.types.is_numeric_dtype(original_df[col]):
-                continuous_features.append(col)
-            else:
-                categorical_features.append(col)
-        
-        try:
-            proximity = proximity_KPI(original_df, counterfactual_df, 
-                                     con=continuous_features, 
-                                     cat=categorical_features)
-            print(f"Proximity KPI: {proximity}")
-            
-            sparsity = sparsity_KPI(original_df, counterfactual_df)
-            print(f"Sparsity KPI: {sparsity}")
-        except ImportError:
-            print("KPIs module not found - skipping KPI calculation")
+        coverage, distance, diversity, sparsity, actionability = get_metrics(
+            original_df, counterfactual_df, counterfactuals, env.constraints, feature_columns, original_data
+        )
+        print(f"\nFinal statistics for sample {sample_index}:")
+        print(f"Coverage : {coverage:.2%} ({success_count}/{num_counterfactuals})")
+        print(f"Mean distance of counterfactuals: {distance:.2f}")
+        print(f"Mean diversity of counterfactuals: {diversity:.2f}")
+        print(f"Sparsity KPI: {sparsity}")
+        print(f"Mean actionability of counterfactuals: {actionability:.2f}")
+        print(f"Average steps per successful counterfactual: {(total_steps / success_count if success_count > 0 else 0):.2f}")
+    
+    print(f"Total time: {time.time() - start_time:.2f} seconds")
     
     # Save counterfactuals if a save path is provided
     if save_path and counterfactuals:
@@ -666,7 +699,6 @@ def _save_multiple_counterfactuals(counterfactuals, original_data, save_path):
             'original_prediction': cf['original_prediction'],
             'counterfactual_prediction': cf['counterfactual_prediction'],
             'distance': cf['distance'],
-            'actionability': cf['actionability'],
             'steps': cf['steps']
         }
         
@@ -692,7 +724,6 @@ def _save_counterfactuals(counterfactuals, original_data, save_path):
             'original_prediction': cf['original_prediction'],
             'counterfactual_prediction': cf['counterfactual_prediction'],
             'distance': cf['distance'],
-            'actionability': cf['actionability'],
             'steps': cf['steps']
         }
         
