@@ -1,7 +1,7 @@
-age,workclass,education,marital-status,occupation,race,sex,hours-per-week,distance,income
-43, State-gov, 9th, Married-civ-spouse, Armed-Forces, Asian-Pac-Islander, Female,41,0.0,1
-43, State-gov, Assoc-voc, Married-civ-spouse, Prof-specialty, White, Female,40,4.0, >50K
-43, Private, 5th-6th, Married-civ-spouse, Machine-op-inspct, Asian-Pac-Islander, Female,40,4.0, >50K
-43, State-gov, Some-college, Married-civ-spouse, Craft-repair, White, Male,40,5.0, <=50K
-44, State-gov, HS-grad, Married-civ-spouse, Prof-specialty, White, Female,40,5.0, >50K
-43, State-gov, HS-grad, Married-civ-spouse, Protective-serv, White, Male,40,5.0, <=50K
+age,workclass,fnlwgt,education,education-num,marital-status,occupation,relationship,race,sex,capital-gain,capital-loss,hours-per-week,native-country,distance,income
+90, Local-gov,194588, 5th-6th,12, Never-married, Adm-clerical, Not-in-family, Other, Male,0,0,52, United-States,0.0,1
+63, Self-emp-not-inc,194638, HS-grad,9, Married-civ-spouse, Craft-repair, Husband, White, Male,0,0,32, United-States,106.0, <=50K
+42, Private,194636, Bachelors,13, Married-civ-spouse, Prof-specialty, Husband, White, Male,0,0,45, United-States,110.0, >50K
+41, Private,194636, Bachelors,13, Married-civ-spouse, Exec-managerial, Husband, White, Male,0,0,60, United-States,112.0, >50K
+41, Private,194636, Assoc-voc,11, Married-civ-spouse, Machine-op-inspct, Husband, White, Male,0,0,40, United-States,116.0, <=50K
+36, State-gov,194630, HS-grad,9, Widowed, Exec-managerial, Not-in-family, White, Female,0,0,40, United-States,117.0, <=50K

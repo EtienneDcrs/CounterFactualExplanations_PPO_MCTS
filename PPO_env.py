@@ -1,206 +1,323 @@
+import time
 import gym
 from gym import spaces
 import numpy as np
 import pandas as pd
 import torch
-import os
-import time
-from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
+import logging
+from typing import Optional, Dict, List, Tuple, Callable
+from stable_baselines3.common.callbacks import BaseCallback
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+
+class DatasetHandler:
+    """Handles dataset loading and preprocessing."""
+    
+    def __init__(self, dataset_path: Optional[str] = None, numpy_dataset: Optional[np.ndarray] = None, 
+                 verbose: int = 1):
+        """
+        Initialize dataset handler with either a CSV file or numpy array.
+
+        Args:
+            dataset_path: Path to the CSV dataset (optional).
+            numpy_dataset: Dataset as a numpy array (optional).
+            verbose: Verbosity level for logging (0: none, 1: info, 2: debug).
+        """
+        self.logger = logging.getLogger(__name__)
+        self.verbose = verbose
+        self.tab_dataset = self._load_dataset(dataset_path, numpy_dataset)
+        self.feature_order = list(self.tab_dataset.columns[:-1])
+
+    def _load_dataset(self, dataset_path: Optional[str], numpy_dataset: Optional[np.ndarray]) -> pd.DataFrame:
+        """Load and clean dataset from path or numpy array."""
+        if dataset_path is not None:
+            dataset = pd.read_csv(dataset_path)
+        elif numpy_dataset is not None:
+            dataset = pd.DataFrame(numpy_dataset)
+        else:
+            raise ValueError("Dataset must be provided through dataset_path or numpy_dataset")
+        
+        original_len = len(dataset)
+        dataset = dataset.dropna()
+        if dropped_rows := original_len - len(dataset):
+            self._log(f"Dropped {dropped_rows} rows with NaN values ({dropped_rows/original_len:.1%} of dataset)")
+        return dataset
+
+    def get_con_cat_columns(self) -> Tuple[List[str], List[str]]:
+        """
+        Identify continuous and categorical columns in the dataset.
+
+        Returns:
+            Tuple containing lists of continuous and categorical column names.
+        """
+        # Exclude the last column (assumed to be the label/target)
+        feature_cols = list(self.tab_dataset.columns[:-1])
+        continuous_columns = [col for col in feature_cols if self.tab_dataset[col].dtype != 'O']
+        categorical_columns = [col for col in feature_cols if self.tab_dataset[col].dtype == 'O']
+        return continuous_columns, categorical_columns
+
+    def _log(self, message: str, level: str = 'info') -> None:
+        """Log messages based on verbosity level."""
+        if self.verbose >= (1 if level == 'info' else 2):
+            getattr(self.logger, level)(message)
 
 class PPOEnv(gym.Env):
-    def __init__(self, dataset_path=None, numpy_dataset=None, model=None, distance_metric=None, 
-                 label_encoders=None, scaler=None, constraints=None, use_random_sampling=True):
+    # Configuration Constants
+    MAX_STEPS: int = 100
+    RANDOMISATION_THRESHOLD: int = 40
+    INITIAL_TEMPERATURE: float = 0.05
+    MAX_TEMPERATURE: float = 10.0
+
+    def __init__(self, dataset_path: Optional[str] = None, numpy_dataset: Optional[np.ndarray] = None,
+                 model=None, distance_metric: Optional[Callable] = None, label_encoders: Optional[Dict] = None,
+                 scaler=None, constraints: Optional[Dict[str, str]] = None, use_random_sampling: bool = True,
+                 verbose: int = 1):
         """
         Initialize the PPO environment for counterfactual generation.
-        
-        Parameters:
-        - dataset_path: Path to the CSV dataset (optional)
-        - numpy_dataset: Dataset as numpy array (optional)
-        - model: The classification model we're generating counterfactuals for
-        - distance_metric: Distance function to use (default: custom hybrid distance)
-        - label_encoders: Label encoders for categorical features
-        - scaler: Scaler for continuous features
-        - constraints: Dictionary specifying feature constraints (e.g., {"age": "increase", "education_number": "fixed"})
-        - use_random_sampling: Boolean flag to control whether reset uses random sampling (True) or fixed index (False)
+
+        Args:
+            dataset_path: Path to the CSV dataset (optional).
+            numpy_dataset: Dataset as a numpy array (optional).
+            model: The classification model for counterfactual generation.
+            distance_metric: Custom distance function (default: hybrid distance).
+            label_encoders: Label encoders for categorical features.
+            scaler: Scaler for continuous features.
+            constraints: Dictionary of feature constraints (e.g., {"age": "increase"}).
+            use_random_sampling: Whether to randomly sample instances on reset.
+            verbose: Verbosity level for logging (0: none, 1: info, 2: debug).
         """
-        super(PPOEnv, self).__init__()
-        
-        # Load dataset
-        self.dataset_path = dataset_path
-        self.numpy_dataset = numpy_dataset
-        self.tab_dataset = None
-        self.label_encoders = label_encoders
-        self.scaler = scaler
-        self.constraints = constraints or {}  # Store constraints dictionary, default to empty dict
-        self.use_random_sampling = use_random_sampling  # New flag for sampling behavior
-        
-        if dataset_path is not None:
-            self.tab_dataset = pd.read_csv(dataset_path)
-            # Drop rows with NaN values
-            original_len = len(self.tab_dataset)
-            self.tab_dataset = self.tab_dataset.dropna()
-            dropped_rows = original_len - len(self.tab_dataset)
-            if dropped_rows > 0:
-                print(f"Dropped {dropped_rows} rows with NaN values ({dropped_rows/original_len:.1%} of dataset)")
-        elif numpy_dataset is not None:
-            self.tab_dataset = pd.DataFrame(numpy_dataset)
-            # Drop rows with NaN values
-            original_len = len(self.tab_dataset)
-            self.tab_dataset = self.tab_dataset.dropna()
-            dropped_rows = original_len - len(self.tab_dataset)
-            if dropped_rows > 0:
-                print(f"Dropped {dropped_rows} rows with NaN values ({dropped_rows/original_len:.1%} of dataset)")
-        
-        assert self.tab_dataset is not None, "Dataset must be provided through dataset_path or numpy_dataset"
-        self.feature_order = list(self.tab_dataset.columns[:-1])
-        # Store the model
+        super().__init__()
+        self.logger = logging.getLogger(__name__)
+        self.verbose = verbose
+
+        # Initialize dataset
+        self.dataset_handler = DatasetHandler(dataset_path, numpy_dataset, verbose)
+        self.tab_dataset = self.dataset_handler.tab_dataset
+        self.feature_order = self.dataset_handler.feature_order
+
+        # Initialize attributes
         self.model = model
-        assert model is not None, "Classification model must be provided"
-        
-        # Get feature categories
-        self.con_columns, self.cat_columns = self.get_con_cat_columns(self.tab_dataset)
-        self.cats_ids = self.generate_cats_ids(self.tab_dataset)
-        self.categorical_indices = [i for i, col in enumerate(self.tab_dataset.columns[:-1]) if col in self.cat_columns]
-                
-        # Set distance metric
-        if distance_metric is None:
-            # Default to custom hybrid distance
-            self.distance = self.calculate_distance
+        # Only keep label encoders for columns in feature_order
+        if label_encoders:
+            self.label_encoders = {col: enc for col, enc in label_encoders.items() if col in self.feature_order}
         else:
-            self.distance = distance_metric
-        
-        # Track current state
+            self.label_encoders = {}
+        self.scaler = scaler
+        self.constraints = constraints or {}
+        self.use_random_sampling = use_random_sampling
+        self.distance = distance_metric or self.calculate_distance
+
+        # Feature categorization
+        self.continuous_columns, self.categorical_columns = self.dataset_handler.get_con_cat_columns()
+        self.categorical_indices = [self.feature_order.index(col) for col in self.categorical_columns]
+        self.categorical_metadata = self.generate_cats_ids()
+
+        # Validate inputs
+        assert model is not None, "Classification model must be provided"
+        assert callable(getattr(model, '__call__', None)), "Model must be callable"
+
+        # Define action and observation spaces
+        self.action_names = self.define_action_space()
+        self.action_space = spaces.Discrete(len(self.action_names))
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf,
+                                         shape=(len(self.feature_order) * 2 + 4,), dtype=np.float32)
+
+        # State tracking
         self.current_instance_idx = None
         self.original_features = None
         self.modified_features = None
         self.original_encoded = None
         self.modified_encoded = None
         self.steps_taken = 0
-        
-        # Convert the list of action names to a proper gym action space
-        self.action_names = self.define_action_space()
-        self.action_space = spaces.Discrete(len(self.action_names))
-        
-        # Define observation space
-        # Original features + modified features + metadata (steps, distance, etc.)
-        feature_dim = len(self.tab_dataset.columns) - 1  # Exclude target variable
-        obs_dim = feature_dim * 2 + 4  # Original + modified + metadata
-        
-        # Set observation space bounds based on feature ranges
-        self.observation_space = spaces.Box(
-            low=-np.inf, 
-            high=np.inf, 
-            shape=(obs_dim,), 
-            dtype=np.float32
-        )
-        
-        # Episode settings
-        self.max_steps = 100
+        self.max_steps = self.MAX_STEPS
         self.done = False
+        self._obs_space_updated = False
 
-    def reset(self):
+    def _log(self, message: str, level: str = 'info') -> None:
+        """Log messages based on verbosity level."""
+        if self.verbose >= (1 if level == 'info' else 2):
+            getattr(self.logger, level)(message)
+
+    # Dataset and Feature Handling
+    def generate_cats_ids(self, dataset: Optional[pd.DataFrame] = None, 
+                         categorical_columns: Optional[List[str]] = None) -> List[Tuple[int, int, np.ndarray]]:
+        """
+        Generate metadata for categorical features.
+
+        Args:
+            dataset: The dataset to process (default: self.tab_dataset).
+            categorical_columns: List of categorical column names (default: from get_con_cat_columns).
+
+        Returns:
+            List of tuples containing (index, number of categories, unique values).
+        """
+        dataset = dataset or self.tab_dataset
+        categorical_columns = categorical_columns or self.categorical_columns
+        cat_metadata = []
+        cat_maps = {}
+        for index, key in enumerate(self.feature_order):
+            if key in categorical_columns:
+                unique_vals = pd.unique(dataset[key])
+                cat_metadata.append((index, len(unique_vals), unique_vals))
+                cat_maps[key] = {val: i for i, val in enumerate(unique_vals)}
+        self.cat_maps = cat_maps
+        return cat_metadata
+
+    # Action Space and Application
+    def define_action_space(self) -> List[str]:
+        """
+        Define the action space based on features and constraints.
+
+        Returns:
+            List of action names (e.g., 'change_feature', 'increase_feature').
+        """
+        action_space = []
+        for column in self.feature_order:
+            constraint = self.constraints.get(column, None)
+            if constraint == "fixed":
+                continue
+            if column in self.categorical_columns:
+                if constraint in [None, "change"]:
+                    action_space.append(f'change_{column}')
+            else:
+                if constraint == "increase":
+                    action_space.append(f'increase_{column}')
+                elif constraint == "decrease":
+                    action_space.append(f'decrease_{column}')
+                elif constraint is None:
+                    action_space.append(f'increase_{column}')
+                    action_space.append(f'decrease_{column}')
+        self._log(f"Defined action space with {len(action_space)} actions: {action_space}")
+        return action_space
+
+    def apply_action(self, action_idx: int) -> np.ndarray:
+        """
+        Apply the selected action to modify features.
+
+        Args:
+            action_idx: Index of the action to take.
+
+        Returns:
+            Modified feature vector.
+        """
+        action_name = self._action_idx_to_name(action_idx)
+        modified_features = self.modified_features.copy()
+        try:
+            action_type, feature_name = self._parse_action(action_name)
+            feature_index = self.feature_order.index(feature_name)
+            if action_type == 'change':
+                modified_features = self._apply_categorical_action(feature_index, modified_features)
+            elif action_type in ['increase', 'decrease']:
+                modified_features = self._apply_continuous_action(feature_index, action_type, modified_features)
+        except Exception as e:
+            self._log(f"Error applying action {action_name}: {e}", level='error')
+        return modified_features
+
+    def _parse_action(self, action_name: str) -> Tuple[str, str]:
+        """Parse action name into type and feature name."""
+        parts = action_name.split('_', 1)
+        return parts[0], parts[1]
+
+    def _apply_categorical_action(self, feature_index: int, modified_features: np.ndarray) -> np.ndarray:
+        """Apply a categorical action to change a feature's value."""
+        for idx, ncat, cat_values in self.categorical_metadata:
+            if idx == feature_index and ncat > 1:
+                current_value = modified_features[feature_index]
+                available_values = [val for val in cat_values if val != current_value]
+                if available_values:
+                    modified_features[feature_index] = np.random.choice(available_values)
+        return modified_features
+
+    def _apply_continuous_action(self, feature_index: int, action_type: str, 
+                               modified_features: np.ndarray) -> np.ndarray:
+        """Apply a continuous action to increase or decrease a feature's value."""
+        current_value = modified_features[feature_index]
+        progress = self.steps_taken / self.max_steps
+        step_size = np.random.uniform(0.05, 0.25) * (1 - progress) + np.random.uniform(0.05, 0.15) * progress
+        
+        if action_type == 'increase':
+            max_value = self.tab_dataset.iloc[:, feature_index].max()
+            calculated_value = current_value * (1 + step_size)
+            if self.tab_dataset.iloc[:, feature_index].dtype in [np.int64, np.int32, int]:
+                calculated_value = int(calculated_value)
+            new_value = min(calculated_value, max_value)
+        else:
+            min_value = self.tab_dataset.iloc[:, feature_index].min()
+            calculated_value = current_value * (1 - step_size)
+            if self.tab_dataset.iloc[:, feature_index].dtype in [np.int64, np.int32, int]:
+                calculated_value = int(calculated_value)
+            new_value = max(calculated_value, min_value)
+        modified_features[feature_index] = new_value
+        return modified_features
+
+    def _action_idx_to_name(self, action_idx: int) -> str:
+        """Convert action index to action name."""
+        return self.action_names[action_idx]
+
+    # Observation and Reward
+    def reset(self) -> np.ndarray:
         """
         Reset the environment for a new episode.
-        
+
         Returns:
-            observation: Initial state observation
+            Initial state observation.
         """
-        # Select instance based on use_random_sampling flag
         if self.use_random_sampling:
             self.current_instance_idx = np.random.randint(0, len(self.tab_dataset))
         else:
-            if self.current_instance_idx is None or self.current_instance_idx < 0 or self.current_instance_idx >= len(self.tab_dataset):
-                raise ValueError(f"Invalid current_instance_idx: {self.current_instance_idx}. Must be set to a valid index when use_random_sampling=False")
+            if self.current_instance_idx is None or self.current_instance_idx < 0 or \
+               self.current_instance_idx >= len(self.tab_dataset):
+                raise ValueError(f"Invalid current_instance_idx: {self.current_instance_idx}")
         
-        # Get the original features (excluding target variable) and create a copy for modification
         self.original_features = self.tab_dataset.iloc[self.current_instance_idx].values[:-1]
         self.modified_features = self.original_features.copy()
-
         self.original_encoded = self.encode_features(self.original_features)
         self.modified_encoded = self.encode_features(self.modified_features)
-
-        # Get the original prediction and store it for later use
         self.original_prediction = self.generate_prediction(self.model, self.original_features)
-        
-        # Detect number of output classes (only once)
-        if not hasattr(self, 'model_output_dim'):
-            test_features = self.encode_features(self.original_features)
-            with torch.no_grad():
-                output = self.model(torch.tensor(test_features, dtype=torch.float32).unsqueeze(0))
-            self.model_output_dim = output.shape[-1]
 
-        # Update observation_space dynamically
-        if not hasattr(self, '_obs_space_updated'):
+        if not hasattr(self, 'model_output_dim'):
+            self.model_output_dim = self._compute_model_output_dim()
+
+        if not self._obs_space_updated:
             full_obs_dim = len(self._get_observation())
             self.observation_space = spaces.Box(
-                low=-np.inf,
-                high=np.inf,
-                shape=(full_obs_dim,),
-                dtype=np.float32
+                low=-np.inf, high=np.inf, shape=(full_obs_dim,), dtype=np.float32
             )
             self._obs_space_updated = True
 
-        # Reset tracking variables
         self.steps_taken = 0
         self.done = False
-        
-        # Create and return the initial observation
         return self._get_observation()
 
-    def step(self, action):
+    def _compute_model_output_dim(self) -> int:
+        """Compute the output dimension of the model."""
+        test_features = self.encode_features(self.original_features)
+        with torch.no_grad():
+            output = self.model(torch.tensor(test_features, dtype=torch.float32).unsqueeze(0))
+        return output.shape[-1]
+
+    def step(self, action: int) -> Tuple[np.ndarray, float, bool, Dict]:
         """
-        Execute one step in the environment with dynamic action randomization based on steps taken.
-        
-        Parameters:
-            action: Index of the action to take (may be overridden with random selection)
-        
+        Execute one step in the environment.
+
+        Args:
+            action: Index of the action to take.
+
         Returns:
-            observation: Next state observation
-            reward: Reward for the action
-            done: Whether the episode has ended
-            info: Additional information for debugging
+            Tuple of (observation, reward, done, info).
         """
-        # Increment step counter
         self.steps_taken += 1
-        
-        randomisation_threshold = 40  # Threshold for randomization
-        # Compute temperature for action randomization
-        if self.steps_taken < randomisation_threshold:
-            temperature = 0.05  # Low temperature: trust the policy
-        else:
-            # Linearly increase temperature from 0.1 to 10.0 between steps 80 and 100
-            progress = (self.steps_taken - randomisation_threshold) / (self.max_steps - randomisation_threshold)
-            temperature = 0.05 + (10.0 - 0.05) * progress
-
-        # Get action probabilities from the PPO policy
+        temperature = self._compute_temperature()
         action_probs = self.get_action_probs(action, temperature)
-
-        # Sample action from modified probabilities
         action = np.random.choice(self.action_space.n, p=action_probs)
-
-        # Apply the selected action
         self.modified_features = self.apply_action(action)
-        
-        # Get the new prediction
         modified_prediction = self.generate_prediction(self.model, self.modified_features)
-        
-        # Calculate distance
-        distance = self.calculate_distance(self.original_features, self.modified_features)
-        
-        # Check if counterfactual found
         counterfactual_found = (modified_prediction != self.original_prediction)
-        
-        # Check if episode is done
-        done = counterfactual_found or (self.steps_taken >= self.max_steps)
-        
-        # Calculate reward
+        self.done = counterfactual_found or (self.steps_taken >= self.max_steps)
+        distance = self.calculate_distance(self.original_features, self.modified_features)
         reward = self.calculate_reward(distance, counterfactual_found)
-        
-        # Get next observation
         observation = self._get_observation()
-        
-        # Prepare info dictionary
         info = {
             'distance': distance,
             'counterfactual_found': counterfactual_found,
@@ -210,273 +327,139 @@ class PPOEnv(gym.Env):
             'modified_features': self.modified_features,
             'action_taken': self._action_idx_to_name(action)
         }
-        
-        self.done = done
-        return observation, reward, done, info
+        return observation, reward, self.done, info
 
-    def get_action_probs(self, action, temperature):
+    def _compute_temperature(self) -> float:
+        """Compute temperature for action randomization."""
+        if self.steps_taken < self.RANDOMISATION_THRESHOLD:
+            return self.INITIAL_TEMPERATURE
+        progress = (self.steps_taken - self.RANDOMISATION_THRESHOLD) / \
+                   (self.max_steps - self.RANDOMISATION_THRESHOLD)
+        return self.INITIAL_TEMPERATURE + (self.MAX_TEMPERATURE - self.INITIAL_TEMPERATURE) * progress
+
+    def get_action_probs(self, action: int, temperature: float) -> np.ndarray:
         """
         Compute action probabilities with temperature-based randomization.
-        
-        Parameters:
-            action: The action suggested by the PPO policy
-            temperature: Temperature parameter to control randomness
-        
+
+        Args:
+            action: The action suggested by the PPO policy.
+            temperature: Temperature parameter to control randomness.
+
         Returns:
-            probs: Modified action probabilities
+            Modified action probabilities.
         """
-        # Get the PPO model's action logits (unnormalized probabilities)
-        n_actions = self.action_space.n
-        probs = np.ones(n_actions) / n_actions  # Start with uniform distribution
-        probs[action] += 1.0  # Bias toward the suggested action
-
-        # Apply temperature scaling
+        probs = np.ones(self.action_space.n) / self.action_space.n
+        probs[action] += 1.0
         probs = np.exp(np.log(probs + 1e-10) / temperature)
-        probs = probs / (np.sum(probs) + 1e-10)  # Normalize to sum to 1
-        return probs
+        return probs / (np.sum(probs) + 1e-10)
 
-    def _get_observation(self):
+    def _get_observation(self) -> np.ndarray:
         """Create observation vector from current state."""
-        # Distance L1 (already optimized)
         distance = self.calculate_distance(self.original_features, self.modified_features)
         steps_normalized = self.steps_taken / self.max_steps
         self.sample_distance = distance
-
-        # One-hot encoding of the original class
         target_vector = np.zeros(self.model_output_dim, dtype=np.float32)
         target_vector[self.original_prediction] = 1.0
-
-        # Final observation
         observation = np.concatenate([
             self.original_encoded,
             self.modified_encoded,
             [steps_normalized, self.sample_distance],
             target_vector
         ]).astype(np.float32)
-
         return np.nan_to_num(observation, nan=0.0)
 
-    def calculate_distance(self, original_features, modified_features):
+    def calculate_distance(self, original_features: np.ndarray, modified_features: np.ndarray) -> float:
         """
-        Calculate L1 (Manhattan) distance between encoded original and modified features.
+        Calculate L1 (Manhattan) distance between original and modified features.
+
+        Args:
+            original_features: The original feature vector.
+            modified_features: The modified feature vector.
+
+        Returns:
+            The L1 distance between the feature vectors.
         """
         dist = 0
-        for i, (o, m) in enumerate(zip(original_features, modified_features)):
-            if i in self.categorical_indices:
-                dist += float(o != m)  # 1 if changed
-            else:
-                dist += abs(o - m)
+        for i, (orig, mod) in enumerate(zip(original_features, modified_features)):
+            dist += float(orig != mod) if i in self.categorical_indices else abs(orig - mod)
         return dist
 
-    def calculate_reward(self, distance, counterfactual_found):
-        # Get model probabilities for modified features
+    def calculate_reward(self, distance: float, counterfactual_found: bool) -> float:
+        """
+        Calculate the reward for the current step.
+
+        Args:
+            distance: Distance between original and modified features.
+            counterfactual_found: Whether a counterfactual was found.
+
+        Returns:
+            The calculated reward.
+        """
         features_encoded = self.encode_features(self.modified_features)
         features_tensor = torch.tensor(features_encoded, dtype=torch.float32).unsqueeze(0)
         with torch.no_grad():
             logits = self.model(features_tensor)
             probs = torch.softmax(logits, dim=-1).squeeze().numpy()
-        
-        # Reward based on reducing confidence in original class
-        original_class_prob = probs[self.original_prediction]
-        confidence_reward = 10 - 10 * original_class_prob  # Higher reward for lower confidence
-        
-        # Number of features modified
-
-        # Counterfactual bonus
+        confidence_reward = 10 - 10 * probs[self.original_prediction]
         counterfactual_bonus = 100.0 if counterfactual_found else 0.0
-        
-        # Total reward
-        reward = confidence_reward + counterfactual_bonus
-        return reward
+        return confidence_reward + counterfactual_bonus
 
-    def apply_action(self, action_idx):
+    def encode_features(self, features: np.ndarray) -> np.ndarray:
         """
-        Apply the selected action to modify features, with stage-specific behaviors.
+        Encode features using label encoders and scaler.
 
-        Parameters:
-            action_idx: Index of the action to take
+        Args:
+            features: The feature vector to encode.
 
         Returns:
-            modified_features: The features after applying the action
+            Encoded feature vector.
         """
-        # Get the action name from the action space
-        action_name = self._action_idx_to_name(action_idx)
-        
-        # Create a copy of the current features to modify
-        modified_features = self.modified_features.copy()
-
-        try:
-            # Extract feature name from action name
-            if '_' in action_name:
-                action_type = action_name.split('_')[0]  # 'change', 'increase', or 'decrease'
-                feature_name = '_'.join(action_name.split('_')[1:])
-                feature_index = list(self.tab_dataset.columns[:-1]).index(feature_name)
-
-                # Handle categorical features
-                if action_type == 'change':
-                    for idx, ncat, cat_values in self.cats_ids:
-                        # Skip if not applicable
-                        if idx != feature_index or ncat <= 1:
-                            continue
-
-                        # Get current category value (raw value, not encoded)
-                        current_value = modified_features[feature_index]
-
-                        # For categorical features, systematically try different categories
-                        available_values = [val for val in cat_values if val != current_value]
-
-                        # Select next category in a deterministic way
-                        if available_values:
-                            next_value = np.random.choice(available_values)
-                            modified_features[feature_index] = next_value
-
-                # Handle continuous features with adaptive step sizes
-                elif action_type in ['increase', 'decrease']:
-                    current_value = modified_features[feature_index]
-
-                    # Adaptive step size based on progress through episode
-                    progress = self.steps_taken / self.max_steps
-
-                    # Adaptive step size: larger at beginning, finer as we progress
-                    step_size = np.random.uniform(0.05, 0.25) * (1 - progress) + np.random.uniform(0.05, 0.15) * progress
-                    # Apply the step
-                    if action_type == 'increase':
-                        max_value = self.tab_dataset.iloc[:, feature_index].max()
-                        calculated_value = current_value * (1 + step_size)
-
-                        # Round if the feature is integer type
-                        if self.tab_dataset.iloc[:, feature_index].dtype in [np.int64, np.int32, int]:
-                            calculated_value = int(calculated_value)
-
-                        new_value = min(calculated_value, max_value)
-                        modified_features[feature_index] = new_value
-                    else:  # decrease
-                        min_value = self.tab_dataset.iloc[:, feature_index].min()
-                        calculated_value = current_value * (1 - step_size)
-
-                        # Round if the feature is integer type
-                        if self.tab_dataset.iloc[:, feature_index].dtype in [np.int64, np.int32, int]:
-                            calculated_value = int(calculated_value)
-
-                        new_value = max(calculated_value, min_value)
-                        modified_features[feature_index] = new_value
-
-        except Exception as e:
-            print(f"Error applying action {action_name}: {e}")
-            # Return the unmodified features if there's an error
-
-        return modified_features
-
-    def _action_idx_to_name(self, action_idx):
-        """Convert action index to action name."""
-        return self.action_names[action_idx]
-
-    def encode_features(self, features):
-        X = np.array(features, dtype=object).reshape(1, -1)  # shape (1, n)
-        
-        if self.label_encoders:
-            for i, col in enumerate(self.feature_order):
-                if col in self.label_encoders:
-                    encoder = self.label_encoders[col]
-                    val = str(X[0, i])
-                    if val in encoder.classes_:
-                        X[0, i] = encoder.transform([val])[0]
-                    else:
-                        X[0, i] = 0  # fallback
-
+        X = np.array(features, dtype=object).reshape(1, -1)
+        for i, col in enumerate(self.feature_order):
+            if col in self.label_encoders:
+                encoder = self.label_encoders[col]
+                val = str(X[0, i])
+                X[0, i] = encoder.transform([val])[0] if val in encoder.classes_ else 0
         if self.scaler:
             X = self.scaler.transform(X)
-
         return X.flatten().astype(np.float32)
 
-    def define_action_space(self):
+    def generate_prediction(self, model, features: np.ndarray) -> int:
         """
-        Define the action space based on the features and constraints.
-        Features in constraints with 'fixed' are excluded, 'increase' or 'decrease' limit continuous features,
-        and unconstrained features allow full modification.
-        """
-        action_space = []
-        
-        for column in self.tab_dataset.columns[:-1]:  # Exclude the target variable
-            # Check if the feature has a constraint
-            constraint = self.constraints.get(column, None)
-            
-            # If feature is fixed, skip it (no actions added)
-            if constraint == "fixed":
-                continue
-                
-            if self.tab_dataset[column].dtype == 'O':  # Categorical feature
-                # Categorical features are only modified via 'change' action, unless fixed
-                if constraint in [None, "change"]:  # Allow change if unconstrained or explicitly allowed
-                    action_space.append(f'change_{column}')
-            else:  # Continuous feature
-                # Add actions based on constraint
-                if constraint == "increase":
-                    action_space.append(f'increase_{column}')
-                elif constraint == "decrease":
-                    action_space.append(f'decrease_{column}')
-                elif constraint is None:  # No constraint, allow both increase and decrease
-                    action_space.append(f'increase_{column}')
-                    action_space.append(f'decrease_{column}')
-        print(f"Defined action space with {len(action_space)} actions: {action_space}")
-        return action_space
+        Generate a prediction for the given features.
 
-    def generate_prediction(self, model, features):
+        Args:
+            model: The classification model.
+            features: The feature vector to predict on.
+
+        Returns:
+            Predicted class index.
+        """
         try:
             features_encoded = self.encode_features(features)
             features_tensor = torch.tensor(features_encoded, dtype=torch.float32).unsqueeze(0)
             with torch.no_grad():
                 logits = model(features_tensor)
                 probs = torch.softmax(logits, dim=-1).squeeze().numpy()
-                pred_class = np.argmax(probs)
-            return pred_class
+            return np.argmax(probs)
         except Exception as e:
-            print(f"Error in generate_prediction: {e}")
+            self._log(f"Error in generate_prediction: {e}", level='error')
             return 0
 
-    def get_con_cat_columns(self, x):
-        """Identify continuous and categorical columns in the dataset."""
-        assert isinstance(x, pd.DataFrame), 'This method can be used only if input is an instance of pandas dataframe at the moment.'
-        
-        con = []
-        cat = []
-        
-        for column in x:
-            if x[column].dtype == 'O':
-                cat.append(column)
-            else:
-                con.append(column)
-                
-        return con, cat
-
-    def generate_cats_ids(self, dataset=None, cat=None):
-        """Generate categorical IDs for encoding."""
-        if dataset is None:
-            assert self.tab_dataset is not None, (
-                'If the dataset is not provided to the function, '
-                'a csv needs to have been provided when instantiating the class'
-            )
-            dataset = self.tab_dataset
-        if cat is None:
-            _, cat = self.get_con_cat_columns(dataset)
-
-        cat_ids = []
-        cat_maps = {}
-        for index, key in enumerate(dataset):
-            if key in set(cat):
-                unique_vals = pd.unique(dataset[key])
-                cat_ids.append((index, len(unique_vals), unique_vals))
-                cat_maps[key] = {val: i for i, val in enumerate(unique_vals)}
-
-        self.cat_maps = cat_maps  
-        return cat_ids
-
 class PPOMonitorCallback(BaseCallback):
-    """
-    Custom callback for monitoring PPO training progress.
-    """
-    def __init__(self, eval_env=None, eval_freq=1000, n_eval_episodes=5, verbose=1):
-        super(PPOMonitorCallback, self).__init__(verbose)
+    """Custom callback for monitoring PPO training progress."""
+    
+    def __init__(self, eval_env=None, eval_freq: int = 1000, n_eval_episodes: int = 5, verbose: int = 1):
+        """
+        Initialize the PPO monitor callback.
+
+        Args:
+            eval_env: Environment for evaluation.
+            eval_freq: Frequency of evaluation in steps.
+            n_eval_episodes: Number of episodes to evaluate.
+            verbose: Verbosity level for logging (0: none, 1: info, 2: debug).
+        """
+        super().__init__(verbose)
         self.eval_env = eval_env
         self.eval_freq = eval_freq
         self.n_eval_episodes = n_eval_episodes
@@ -485,41 +468,15 @@ class PPOMonitorCallback(BaseCallback):
         self.counterfactuals_found = 0
         self.total_episodes = 0
         self.success_rate = 0.0
+        self._logger = logging.getLogger(__name__)
 
-    def _on_step(self):
+    def _on_step(self) -> bool:
+        """Callback executed at each training step."""
         if self.n_calls % self.eval_freq == 0:
-            # Log time since last evaluation
             current_time = time.time()
             fps = self.eval_freq / (current_time - self.last_eval_time)
             self.last_eval_time = current_time
-            
             if self.verbose > 1:
-                print(f"Steps: {self.n_calls}, FPS: {fps:.2f}")
-                print(f"Current success rate: {self.success_rate:.2%}")
-             
+                self._logger.debug(f"Steps: {self.n_calls}, FPS: {fps:.2f}")
+                self._logger.debug(f"Current success rate: {self.success_rate:.2%}")
         return True
-    
-    def _evaluate_policy(self):
-        """Evaluate the policy on the evaluation environment."""
-        counterfactuals_found = 0
-        
-        for _ in range(self.n_eval_episodes):
-            done = False
-            obs = self.eval_env.reset()
-            
-            while not done:
-                action, _ = self.model.predict(obs, deterministic=True)
-                obs, reward, done, info = self.eval_env.step(action)
-                
-                if info['counterfactual_found']:
-                    counterfactuals_found += 1
-                    break
-        
-        self.total_episodes += self.n_eval_episodes
-        self.counterfactuals_found += counterfactuals_found
-        self.success_rate = self.counterfactuals_found / self.total_episodes
-        
-        if self.verbose > 0:
-            print(f"Evaluation over {self.n_eval_episodes} episodes:")
-            print(f"Success rate: {counterfactuals_found/self.n_eval_episodes:.2%}")
-            print(f"Overall success rate: {self.success_rate:.2%}")

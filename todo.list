@@ -1,9 +1,9 @@
-    X               Essayer avec d'autres datasets  -> 100% sur adult, diabetes, breast_cancer, bank
-    X           Essayer avec Certifai, Dice et comparer les résultats
-    X               Mettre des contraintes sur les features (features fixées ou only increase)
-    X               Générer plusiers contre-factuels pour chaque instance
-    03/07        Utiliser les KPIs de Slimane sur cette version
-    03/07        Intégrer la diversité et plausibilité
+    X        Essayer avec d'autres datasets  -> 100% sur adult, diabetes, breast_cancer, bank
+    X        Essayer avec Certifai, Dice et comparer les résultats
+    X        Mettre des contraintes sur les features (features fixées ou only increase)
+    X        Générer plusiers contre-factuels pour chaque instance
+    X        Utiliser les KPIs de Slimane sur cette version
+    X        Intégrer la diversité et plausibilité
 
 
 
