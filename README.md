@@ -1,117 +1,169 @@
-# CERTIFAI
-A python implementation of CERTIFAI framework for machine learning models' explainability as discussed in https://www.aies-conference.com/2020/wp-content/papers/099.pdf 
+Counterfactual Explanations Generation Algorithm
+Overview
+This project implements a Proximal Policy Optimization (PPO) based algorithm for generating counterfactual explanations for classification models. Counterfactual explanations identify minimal changes to input features that result in a different prediction, helping to interpret and understand machine learning model decisions.
+The algorithm uses reinforcement learning (RL) to generate counterfactuals, with support for feature constraints, Monte Carlo Tree Search (MCTS) for action selection, and comprehensive evaluation metrics. It is designed to work with tabular datasets and includes utilities for dataset handling, model training, and result analysis.
+Features
 
-To quote the framework:
-Shubham Sharma, Jette Henderson, and Joydeep Ghosh. 2020. CERTIFAI:
-A Common Framework to Provide Explanations and Analyse the Fairness
-and Robustness of Black-box Models. In Proceedings of the 2020 AAAI/ACM
-Conference on AI, Ethics, and Society (AIES ’20), February 7–8, 2020, New
-York, NY, USA. ACM, New York, NY, USA, 7 pages. https://doi.org/10.1145/
-3375627.3375812
+PPO-based Counterfactual Generation: Utilizes the Stable Baselines3 PPO implementation to train an RL agent for generating counterfactuals.
+Custom Environment: A Gym-compliant environment (PPOEnv) tailored for counterfactual generation with support for continuous and categorical features.
+Feature Constraints: Supports constraints like "increase", "decrease" (for numerical features), and "fixed" (for any feature).
+MCTS Integration: Optional Monte Carlo Tree Search for improved action selection during counterfactual generation.
+Evaluation Metrics: Calculates KPIs including coverage, distance, implausibility, sparsity, and actionability.
+Flexible Dataset Handling: Supports CSV datasets or NumPy arrays with automatic preprocessing for missing values.
+Model Persistence: Saves and loads trained PPO models, classifiers, label encoders, and scalers.
+Logging and Monitoring: Comprehensive logging and a custom callback (PPOMonitorCallback) for tracking training progress.
 
-## Installation
-Clone this repository and change the working directory to be inside the cloned repository.
-To install the dependencies needed by the repository, either use pip:
-```
-pip install -r requirements.txt
-```
-Otherwise you can use anaconda to create a virtual environment and install the libraries there:
-```
-conda create -n certifai --file requirements.txt
-conda activate certifai
-```
+Requirements
 
-You're ready to go.
+Python 3.8+
+Libraries:
+torch
+numpy
+pandas
+stable-baselines3
+gym
+tqdm
+scikit-learn
 
 
-## Background
-The CERTIFAI.py module contains the CERTIFAI class, implementing the CERTIFAI framework illustrated in the referenced work. The framework aims at building a model-agnostic interpretation framework, based on the generation of "counterfactuals", i.e. data points that are as close as possible to actual data samples but for which the model output a different prediction. Different analyses over these counterfactuals can then be used for different purposes, as described in more details in the original paper and below in the use cases.
 
-## Usage
-### Fitting to a dataset
-As a first step, the CERTIFAI class needs to be instantiated. To do so, 3 options are available:
-1. Instantiate the class without additional arguments. In this case, the dataset will have to be passed as an argument together with the trained model in all the class methods. (e.g.)
-```
-certifai_instance = CERTIFAI()
-```
-2. Instantiate the class using the dataset_path or the numpy_dataset arguments. In the first case, the path to a .csv file can be provided and the instance will be generated so as to have the referenced dataset in the form of a pandas dataframe. In the second case, a numpy array is passed when instantiating and the dataset will be stored in the form of a numpy array. In both cases, the dataset is stored under the attribute "tab_dataset".
-(from .csv)
-```
-certifai_instance = CERTIFAI(dataset_path = 'User/example_path/example_file.csv')
-print(type(certifai_instance.tab_dataset))
-pandas.DataFrame
-```
-(from numpy array)
-```
-example_array = numpy.array([[0,1],[0,1]])
-certifai_instance = CERTIFAI(numpy_dataset = example_array)
-print(type(certifai_instance.tab_dataset))
-numpy.ndarray
-```
-3. Instantiate the class via the class method *from_csv*, by providing the path to a .csv file. This option works in the same way as passing the .csv path to dataset_path when instantiating.
-(e.g.)
-```
-certifai_instance = CERTIFAI.from_csv('User/example_path/example_file.csv')
-print(type(certifai_instance.tab_dataset))
-pandas.DataFrame
-```
+Install dependencies using:
+pip install torch numpy pandas stable-baselines3 gym tqdm scikit-learn
 
-Once the instance is ready, the fit method will generate the counterfactuals for each sample in the referenced dataset, under the given trained model.
-(minimal use example)
-```
-certifai_instance.fit(model)
-```
-(use if dataset was not provided when instantiating, as described above)
-```
-certifai_instance.fit(model, x = include_here_your_dataset)
-```
+Project Structure
 
-Additional options are described in details in the module (some further common use examples will be included shortly). The results of the *fit* method will be stored in the *results* attribute of the class instance and will include a list of tuples each containing the original sample at that index in the dataset, the generated counterfactuals for that sample and distances from the original sample of those counterfactuals.
-(e.g.)
-```
-certifai_instance.fit(model)
-print(type(certifai_instance.results))
-list
-print(type(certifai_instance.results[0]))
-tuple
-```
-N.B. The *results* attribute won't contain anything if the *fit* method is not called.
+PPO_train.py: Main script for training the PPO model and generating counterfactuals. Includes utilities for dataset handling, model initialization, training, and result saving.
+PPO_env.py: Defines the PPOEnv Gym environment, DatasetHandler for dataset preprocessing, and PPOMonitorCallback for training monitoring.
+classification_models/: Directory to store trained classifier models (.pt files) and associated encoders/scalers (.pkl files).
+ppo_models/: Directory to store trained PPO models (.zip files).
+ppo_logs/: Directory for TensorBoard logs.
+data/: Directory for input datasets and generated counterfactuals.
 
-### Check Robustness
-The robustness of the model in the framework is described as the average distance of the counterfactuals from the relative original samples. If the average distance is higher, the model is more robust, because to generate a different prediction a more different data point is needed, while in the opposite case a different prediction can be obtained with less "effort" (see the paper for more details). The CERTIFAI class has a method *check_robustness* that computes the average distance of the counterfactuals and that can be called after the use of *fit* to generate the counterfactuals. Both normalised and unnormalised case is supported (see paper for more details):
-(unnormalised robustness)
-```
-certifai_instance.check_robustness()
-```
-(normalised robustness)
-```
-certifai_instance.check_robustness(normalised = True)
-```
+Usage
 
-### Check Fairness
-The fairness of the model for specific subgroups of the original dataset can be checked by comparing the robustness of the model for those different subsets. The CERTIFAI class includes a method *check_fairness* that does exactly this. It accepts as an argument the conditions on which the subsets of the dataset needs to be obtained in the form of a list of dictionaries, whereas each dictionary contains the partitioning condition(s). At the moment, just categorical feature in the dataset can be used for partitioning the dataset in this method. The key(s) of the dictionaries need to match the column names of the dataset, while the values need to match a plausible value of that column in the dataset. The method returns the average (un)normalised robustness score for each subset as values in a dictionary having the partitioning conditions as keys.
-(e.g.: check fairness of observations for male against female samples in the dataset. Here we assume that the dataset contains a column named 'Sex' that can take at least 'Male' and 'Female' as values)
-```
-conditions = [{'Sex': 'Female'}, {'Sex': 'Male'}]
-certifai_instance.check_fairness(conditions)
-```
-Multiple conditions can be passed in each dictionary inside the conditioning list and the robustness score can be normalised in the same way as for the *check_robustness* method. Additionally, a visualisation via matplotlib can be generated by setting the argument *visualise_results* to True and the results can be printed more explicitly by setting to True the *print_results* argument.
+Prepare the Dataset:
 
-### Features Importance
-The relative importance of the features in the model are obtained by counting the number of times the given feature changed in generating a counterfactual. The paper does not explicitly says how to treat continuous variables under this respect. This counting is performed by the class method *check_feature_importance*. In this implementation, a continuous variable is counted as "changed" if the counterfactual is bigger or smaller than the original value +- standard_deviation/sensibility, whereas the standard deviation is computed for each continuous feature in the dataset and the sensibility is an argument of the described method and, as such, can be chosen by the user (default is 10 and different values for different features can be passed by using a dictionary having features' names as keys and chosen sensibilities as corresponding values). 
-(minimal example)
-```
-certifai_instance.check_feature_importance()
-```
-(Setting the sensibility, i.e. same for every continuous feature)
-```
-certifai_instance.check_feature_importance(sensibility = 5)
-```
-(Setting a different sensibility for each continuous feature)
-```
-certifai_instance.check_feature_importance(sensibility = {'continuous_feature_name_1': 5, 'continuous_feature_name_2': 10})
-```
-Similarly to the *check_fairness* method, the results can be visualised via the *visualise_results* argument being set  to True.
+Place your dataset (CSV format) in the data/ directory or provide a NumPy array.
+Ensure the last column is the target variable.
+Example dataset: data/adult.csv
 
-## Examples
-An example of the use of CERTIFAI class is included in ModelExCERTIFAI.py. The example script includes also the training of a classification model on the drug200 dataset with PyTorch and PyLightning. To run the script just run it with python after having installed all dependencies.
+
+Configure the Algorithm:
+
+Modify the Config class in PPO_train.py to set parameters like:
+DATASET_NAME: Name of the dataset (e.g., adult).
+TOTAL_TIMESTEPS: Number of training timesteps (default: 75000).
+CONSTRAINTS: Feature constraints (e.g., {"age": "increase"}).
+TRAINING_MODE: new, load, or continue for training or loading models.
+Other hyperparameters (e.g., LEARNING_RATE_NEW, N_STEPS, etc.).
+
+
+
+
+Run the Algorithm:
+
+Execute the main script to train the PPO model and generate counterfactuals:python PPO_train.py
+
+
+The script will:
+Load or train a classifier model.
+Train or load a PPO model based on the TRAINING_MODE.
+Generate counterfactuals for the specified indices (default: first 100 samples).
+Save results to data/generated_counterfactuals_ppo_<dataset_name>.csv.
+
+
+
+
+Output:
+
+Counterfactuals: Saved as a CSV file with columns for sample ID, original and counterfactual features, predictions, distance, and steps taken.
+Original and Counterfactual DataFrames: Saved as *_original.csv and *_counterfactual.csv.
+Metrics: Logged metrics include:
+Coverage: Proportion of samples with successful counterfactuals.
+Distance: Mean L1 distance between original and counterfactual features.
+Implausibility: Mean distance to the closest real sample.
+Sparsity: Average number of changed features.
+Actionability: Proportion of counterfactuals respecting "fixed" constraints.
+
+
+
+
+Optional MCTS:
+
+Enable MCTS for action selection by setting use_mcts=True in generate_counterfactuals or generate_multiple_counterfactuals_for_sample.
+Adjust MCTS_SIMULATIONS in the Config class to control the number of simulations.
+
+
+
+Example
+To generate counterfactuals for the Adult dataset:
+from PPO_train import train_ppo_for_counterfactuals, generate_counterfactuals
+
+# Train or load PPO model
+ppo_model, env = train_ppo_for_counterfactuals(
+    dataset_path="data/adult.csv",
+    mode="new",
+    constraints={"age": "increase"}
+)
+
+# Generate counterfactuals
+counterfactuals, original_df, counterfactual_df = generate_counterfactuals(
+    ppo_model=ppo_model,
+    env=env,
+    dataset_path="data/adult.csv",
+    save_path="data/generated_counterfactuals.csv",
+    specific_indices=[0, 1, 2]
+)
+
+Key Components
+
+PPOEnv (PPO_env.py):
+
+A Gym environment for counterfactual generation.
+Handles continuous and categorical features with appropriate actions.
+Supports feature constraints and encodes features using provided scalers and label encoders.
+Computes rewards based on confidence scores and counterfactual success.
+
+
+DatasetHandler (PPO_env.py):
+
+Loads and preprocesses datasets, handling missing values and identifying feature types.
+
+
+PPOMonitorCallback (PPO_env.py):
+
+Monitors training progress, logging steps, FPS, and success rates.
+
+
+Config (PPO_train.py):
+
+Central configuration for hyperparameters and paths.
+
+
+ResultSaver (PPO_train.py):
+
+Saves counterfactual results and associated DataFrames.
+
+
+Metrics (PPO_train.py):
+
+Computes and logs evaluation metrics for generated counterfactuals.
+
+
+
+Notes
+
+The classifier model must be pre-trained or will be trained automatically if not found.
+The algorithm assumes the dataset is clean; missing values are dropped by default.
+For large datasets, consider using batch_size in generate_counterfactuals to save intermediate results.
+MCTS can improve counterfactual quality but increases computation time.
+
+Future Improvements
+
+Add support for additional distance metrics.
+Enhance MCTS with adaptive simulation counts.
+Implement parallel processing for faster counterfactual generation.
+Add visualization tools for counterfactual analysis.
+
+License
+This project is licensed under the MIT License.
