@@ -402,7 +402,8 @@ class PPOEnv(gym.Env):
             probs = torch.softmax(logits, dim=-1).squeeze().numpy()
         confidence_reward = 10 - 10 * probs[self.original_prediction]
         counterfactual_bonus = 100.0 if counterfactual_found else 0.0
-        return confidence_reward + counterfactual_bonus
+        #steps_ratio = self.steps_taken / self.max_steps
+        return (confidence_reward + counterfactual_bonus)# * (1 - steps_ratio)
 
     def encode_features(self, features: np.ndarray) -> np.ndarray:
         """

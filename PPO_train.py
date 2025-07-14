@@ -24,8 +24,9 @@ class Config:
     """Configuration constants for PPO training and counterfactual generation."""
     DATASET_NAME: str = 'adult'
     DATASET_PATH: str = os.path.join('data', f'{DATASET_NAME}.csv')
-    TOTAL_TIMESTEPS: int = 65000
-    CONSTRAINTS: Dict[str, str] = {"age": "increase"}
+    TOTAL_TIMESTEPS: int = 50000
+    # Types of constraints : increase, decrease (only for numerical features), fixed (any feature)
+    CONSTRAINTS: Dict[str, str] =  {"age": "increase"}
     LOGS_DIR: str = 'ppo_logs'
     SAVE_DIR: str = 'ppo_models'
     DATA_DIR: str = 'data'
@@ -43,10 +44,11 @@ class Config:
     MAX_GRAD_NORM: float = 0.5
     EVAL_FREQ: int = 5000
     N_EVAL_EPISODES: int = 10
-    CHECKPOINT_SAVE_FREQ: int = 10000
+    CHECKPOINT_SAVE_FREQ: int = 50000
     MAX_STEPS_PER_SAMPLE: int = 100
-    MAX_TRIES: int = 10
+    MAX_TRIES: int = 15
     MCTS_SIMULATIONS: int = 10
+    # Training mode options: 'new', 'load', or 'continue'
     TRAINING_MODE: str = 'load'
 
 class DatasetUtils:
@@ -172,13 +174,12 @@ def load_classifier_model(dataset_path: str, model_path: Optional[str], num_feat
     logger.info(f"Classifier accuracy on full dataset: {accuracy:.2f}")
     return classifier
 
-def load_encoders_and_scaler(model_path: str, verbose: int = 1) -> Tuple[Optional[Dict], Optional[object]]:
+def load_encoders_and_scaler(model_path: str) -> Tuple[Optional[Dict], Optional[object]]:
     """
     Load label encoders and scaler.
 
     Args:
         model_path: Path to the classifier model.
-        verbose: Verbosity level for logging.
 
     Returns:
         Tuple of (label_encoders, scaler).
@@ -205,7 +206,7 @@ def load_encoders_and_scaler(model_path: str, verbose: int = 1) -> Tuple[Optiona
     return label_encoders, scaler
 
 def initialize_ppo_model(ppo_model_path: str, env: PPOEnv, logs_dir: str, 
-                         mode: str, verbose: int) -> PPO:
+                         mode: str, dataset_name: str, verbose: int) -> PPO:
     """
     Initialize or load a PPO model based on the specified mode.
 
@@ -214,6 +215,7 @@ def initialize_ppo_model(ppo_model_path: str, env: PPOEnv, logs_dir: str,
         env: Training environment.
         logs_dir: Directory for tensorboard logs.
         mode: Training mode ('new', 'load', or 'continue').
+        dataset_name: Name of the dataset to ensure correct model loading.
         verbose: Verbosity level for logging.
 
     Returns:
@@ -254,7 +256,7 @@ def initialize_ppo_model(ppo_model_path: str, env: PPOEnv, logs_dir: str,
     
     if mode == 'load':
         if not model_exists:
-            raise ValueError(f"No PPO model found at {ppo_model_path} for loading")
+            raise ValueError(f"No PPO model found at {ppo_model_path} for dataset {dataset_name} for loading")
         logger.info(f"Loading existing PPO model from {ppo_model_path} without further training")
         model = PPO.load(ppo_model_path, env=env, tensorboard_log=logs_dir)
         logger.info("PPO model loaded successfully")
@@ -321,7 +323,8 @@ def train_ppo_for_counterfactuals(dataset_path: str, model_path: Optional[str] =
         ValueError: If mode is invalid or model not found for 'load' mode.
     """
     logger = logging.getLogger(__name__)
-    logger.info(f"Starting counterfactual generation with PPO for dataset: {dataset_path} (mode: {mode})")
+    dataset_name = os.path.splitext(os.path.basename(dataset_path))[0]
+    logger.info(f"Starting counterfactual generation with PPO for dataset: {dataset_name} (mode: {mode})")
     
     setup_directories([logs_dir, save_dir, Config.DATA_DIR])
     
@@ -329,22 +332,21 @@ def train_ppo_for_counterfactuals(dataset_path: str, model_path: Optional[str] =
     classifier = load_classifier_model(dataset_path, model_path, dataset_utils.num_features, 
                                       dataset_utils.num_classes, verbose)
     label_encoders, scaler = load_encoders_and_scaler(model_path or 
-                                                     f"classification_models/{os.path.splitext(os.path.basename(dataset_path))[0]}_model.pt", 
-                                                     verbose)
+                                                     f"classification_models/{dataset_name}_model.pt")
     
     env = PPOEnv(dataset_path=dataset_path, model=classifier, label_encoders=label_encoders, 
                  scaler=scaler, constraints=constraints, use_random_sampling=True, verbose=verbose)
     eval_env = PPOEnv(dataset_path=dataset_path, model=classifier, label_encoders=label_encoders, 
                       scaler=scaler, constraints=constraints, use_random_sampling=True, verbose=verbose)
     
-    ppo_model_path = os.path.join(save_dir, f"{Config.CHECKPOINT_PREFIX}_final_{os.path.basename(dataset_path)}.zip")
-    model = initialize_ppo_model(ppo_model_path, env, logs_dir, mode, verbose)
+    ppo_model_path = os.path.join(save_dir, f"{Config.CHECKPOINT_PREFIX}_{dataset_name}_final.zip")
+    model = initialize_ppo_model(ppo_model_path, env, logs_dir, mode, dataset_name, verbose)
     
     if mode != 'load':
         checkpoint_callback = CheckpointCallback(
             save_freq=Config.CHECKPOINT_SAVE_FREQ,
             save_path=save_dir,
-            name_prefix=f"{Config.CHECKPOINT_PREFIX}_{os.path.basename(dataset_path)}_checkpoint"
+            name_prefix=f"{Config.CHECKPOINT_PREFIX}_{dataset_name}_checkpoint"
         )
         monitor_callback = PPOMonitorCallback(
             eval_env=eval_env,
@@ -483,6 +485,39 @@ def get_metrics(original_df: pd.DataFrame, counterfactual_df: pd.DataFrame, coun
     logger.debug(f"Mean actionability of counterfactuals: {actionability:.2f}")
     
     return coverage, distance, implausibility, sparsity, actionability
+
+
+def get_diversity(counterfactual_df: pd.DataFrame):
+    """
+    Calculate diversity of counterfactuals for a unique sample. 
+    Diversity is the smallest distance of a counterfactual with his furthest neighbor.
+
+    Args:
+        counterfactual_df: DataFrame of counterfactual samples.
+
+    Returns:
+        Diversity score (Higher value means better diversity).
+    """
+    if counterfactual_df.empty:
+        return 0.0
+    
+    diversities = []
+    num_counterfactuals = len(counterfactual_df)
+
+    # For each counterfactual, calculate the distance to all others and store the maximum distance
+    for i in range(num_counterfactuals):
+        distances = []
+        for j in range(num_counterfactuals):
+            if i != j:
+                dist = calculate_distance(counterfactual_df.iloc[i].values[:-1], 
+                                          counterfactual_df.iloc[j].values[:-1])
+                distances.append(dist)
+        if distances:
+            diversities.append(min(distances))
+    print(diversities)
+    diversity = round(min(diversities),2) if diversities else 0.0
+
+    return diversity
 
 def generate_counterfactuals(ppo_model: PPO, env: PPOEnv, dataset_path: str, 
                             save_path: Optional[str] = None, specific_indices: Optional[List[int]] = None,
@@ -693,13 +728,16 @@ def generate_multiple_counterfactuals_for_sample(ppo_model: PPO, env: PPOEnv, da
         coverage, distance, implausibility, sparsity, actionability = get_metrics(
             original_df, counterfactual_df, counterfactuals, env.constraints, 
             dataset_utils.feature_columns, dataset_utils.dataset, verbose)
+        diversity = get_diversity(counterfactual_df)
         logger.info(f"\nFinal statistics for sample {sample_index}:")
         logger.info(f"Coverage: {coverage:.2%} ({success_count}/{num_counterfactuals})")
         logger.info(f"Mean distance of counterfactuals: {distance:.2f}")
-        logger.info(f"Mean implausibility of counterfactuals: {implausibility:.2f}")
-        logger.info(f"Sparsity KPI: {sparsity}")
-        logger.info(f"Mean actionability of counterfactuals: {actionability:.2f}")
+        logger.info(f"Mean sparsity: {sparsity}")
+        logger.info(f"Mean implausibility: {implausibility:.2f}")
+        logger.info(f"Mean actionability: {actionability:.2f}")
+        logger.info(f"Diversity: {diversity:.2f}")
         logger.info(f"Average steps per successful counterfactual: {(total_steps / success_count if success_count > 0 else 0):.2f}")
+
     
     logger.info(f"Total time: {time.time() - start_time:.2f} seconds")
     
@@ -733,16 +771,31 @@ def main():
     )
     
     if ppo_model is not None:
-        logger.info("Generating counterfactuals using standard PPO...")
-        generate_counterfactuals(
+        # logger.info("Generating counterfactuals using standard PPO...")
+        # generate_counterfactuals(
+        #     ppo_model=ppo_model,
+        #     env=env,
+        #     dataset_path=dataset_path,
+        #     save_path=os.path.join(Config.DATA_DIR, 
+        #                           f"generated_counterfactuals_ppo_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
+        #     max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
+        #     use_mcts=False,
+        #     specific_indices=indices_to_use,
+        #     verbose=1
+        # )
+
+        logger.info("Generating multiple counterfactuals for a specific sample...")
+        sample_index = 0  # Change this to the desired sample index
+        _, _, counterfactual_df = generate_multiple_counterfactuals_for_sample(
             ppo_model=ppo_model,
             env=env,
             dataset_path=dataset_path,
+            sample_index=sample_index,
+            num_counterfactuals=25,
             save_path=os.path.join(Config.DATA_DIR, 
-                                  f"generated_counterfactuals_ppo_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
+                                  f"generated_counterfactuals_sample_{sample_index}.csv"),
             max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
             use_mcts=False,
-            specific_indices=indices_to_use,
             verbose=1
         )
 
