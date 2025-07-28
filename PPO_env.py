@@ -316,7 +316,7 @@ class PPOEnv(gym.Env):
         counterfactual_found = (modified_prediction != self.original_prediction)
         self.done = counterfactual_found or (self.steps_taken >= self.max_steps)
         distance = self.calculate_distance(self.original_features, self.modified_features)
-        reward = self.calculate_reward(distance, counterfactual_found)
+        reward = self.calculate_reward(counterfactual_found)
         observation = self._get_observation()
         info = {
             'distance': distance,
@@ -384,12 +384,11 @@ class PPOEnv(gym.Env):
             dist += float(orig != mod) if i in self.categorical_indices else abs(orig - mod)
         return dist
 
-    def calculate_reward(self, distance: float, counterfactual_found: bool) -> float:
+    def calculate_reward(self, counterfactual_found: bool) -> float:
         """
         Calculate the reward for the current step.
 
         Args:
-            distance: Distance between original and modified features.
             counterfactual_found: Whether a counterfactual was found.
 
         Returns:
@@ -402,8 +401,7 @@ class PPOEnv(gym.Env):
             probs = torch.softmax(logits, dim=-1).squeeze().numpy()
         confidence_reward = 10 - 10 * probs[self.original_prediction]
         counterfactual_bonus = 100.0 if counterfactual_found else 0.0
-        #steps_ratio = self.steps_taken / self.max_steps
-        return (confidence_reward + counterfactual_bonus)# * (1 - steps_ratio)
+        return (confidence_reward + counterfactual_bonus)
 
     def encode_features(self, features: np.ndarray) -> np.ndarray:
         """

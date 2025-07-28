@@ -22,14 +22,14 @@ logging.basicConfig(level=logging.INFO)
 
 class Config:
     """Configuration constants for PPO training and counterfactual generation."""
-    DATASET_NAME: str = 'adult'
+    DATASET_NAME: str = 'diabetes'
     DATASET_PATH: str = os.path.join('data', f'{DATASET_NAME}.csv')
     TOTAL_TIMESTEPS: int = 50000
     # Types of constraints : increase, decrease (only for numerical features), fixed (any feature)
-    CONSTRAINTS: Dict[str, str] =  {"age": "increase"}
-    LOGS_DIR: str = 'ppo_logs'
+    CONSTRAINTS: Dict[str, str] =  {}
     SAVE_DIR: str = 'ppo_models'
     DATA_DIR: str = 'data'
+    LOGS_DIR: str = 'ppo_logs'
     CHECKPOINT_PREFIX: str = 'ppo_certifai'
     LEARNING_RATE_NEW: float = 1e-4
     LEARNING_RATE_CONTINUED: float = 1e-4
@@ -46,7 +46,7 @@ class Config:
     N_EVAL_EPISODES: int = 10
     CHECKPOINT_SAVE_FREQ: int = 50000
     MAX_STEPS_PER_SAMPLE: int = 100
-    MAX_TRIES: int = 15
+    MAX_TRIES: int = 5
     MCTS_SIMULATIONS: int = 10
     # Training mode options: 'new', 'load', or 'continue'
     TRAINING_MODE: str = 'load'
@@ -372,153 +372,6 @@ def train_ppo_for_counterfactuals(dataset_path: str, model_path: Optional[str] =
     
     return model, env
 
-def calculate_actionability(original_features: np.ndarray, counterfactual_features: np.ndarray, 
-                           constraints: Dict[str, str], feature_columns: List[str]) -> int:
-    """
-    Calculate actionability score for a counterfactual based on constraints.
-
-    Args:
-        original_features: Original feature values.
-        counterfactual_features: Counterfactual feature values.
-        constraints: Dictionary of feature constraints.
-        feature_columns: List of feature column names.
-
-    Returns:
-        Actionability score (1 if all fixed features unchanged, 0 otherwise).
-    """
-    if not constraints:
-        return 1
-    for feature, constraint in constraints.items():
-        if constraint == "fixed":
-            idx = feature_columns.index(feature)
-            if original_features[idx] != counterfactual_features[idx]:
-                return 0
-    return 1
-
-def calculate_distance(original_features: np.ndarray, modified_features: np.ndarray) -> float:
-    """
-    Calculate L1 (Manhattan) distance between original and modified features.
-
-    Args:
-        original_features: Original feature vector.
-        modified_features: Modified feature vector.
-
-    Returns:
-        L1 distance between the feature vectors.
-    """
-    categorical_indices = [i for i, feature in enumerate(original_features) 
-                          if isinstance(feature, (str, bool))]
-    dist = 0
-    for i, (o, m) in enumerate(zip(original_features, modified_features)):
-        dist += float(o != m) if i in categorical_indices else abs(o - m)
-    return dist
-
-def get_metrics(original_df: pd.DataFrame, counterfactual_df: pd.DataFrame, counterfactuals: List[Dict],
-                constraints: Dict[str, str], feature_columns: List[str], original_data: pd.DataFrame,
-                verbose: int = 0) -> Tuple[float, float, float, float, float]:
-    """
-    Calculate KPIs for generated counterfactuals.
-
-    Args:
-        original_df: DataFrame of original samples.
-        counterfactual_df: DataFrame of counterfactual samples.
-        counterfactuals: List of counterfactual dictionaries.
-        constraints: Dictionary of feature constraints.
-        feature_columns: List of feature column names.
-        original_data: Original dataset for implausibility calculation.
-        verbose: Verbosity level for logging.
-
-    Returns:
-        Tuple of (coverage, distance, implausibility, sparsity, actionability).
-    """
-    logger = logging.getLogger(__name__)
-    logger.debug(f"Calculating KPIs for {len(counterfactuals)} counterfactuals...")
-    
-    if not counterfactuals:
-        logger.warning("No counterfactuals generated. Returning default KPIs.")
-        return 0, 0, 0, 0, 0
-    
-    # Calculate coverage
-    success_count = sum(cf['success'] for cf in counterfactuals)
-    num_samples = len(counterfactuals)
-    coverage = success_count / num_samples if num_samples > 0 else 0
-    logger.debug(f"Coverage: {coverage:.2%} ({success_count}/{num_samples})")
-    
-    # Calculate distance
-    distance = np.mean([cf['distance'] for cf in counterfactuals]) if counterfactuals else 0
-    logger.debug(f"Mean distance of counterfactuals: {distance:.2f}")
-    
-    # Calculate implausibility
-    implausibility_scores = []
-    for cf in counterfactuals:
-        if cf['counterfactual_features'] is not None:
-            cfe = np.concatenate((cf['counterfactual_features'], [cf['counterfactual_prediction']]))
-            closest_sample = get_closest_samples(cfe, original_data, X=5, require_different_outcome=False).iloc[0]
-            implausibility_scores.append(calculate_distance(cfe[:-1], closest_sample[:-1]))
-    implausibility = np.mean(implausibility_scores) if implausibility_scores else 0
-    logger.debug(f"Mean implausibility of counterfactuals: {implausibility:.2f}")
-    
-    # Calculate sparsity
-    sparsity = 0
-    if len(original_df) > 0 and len(counterfactual_df) > 0:
-        assert len(original_df) == len(counterfactual_df), \
-            "Original and counterfactual DataFrames must have the same length"
-        assert original_df.columns.tolist() == counterfactual_df.columns.tolist(), \
-            "Original and counterfactual DataFrames must have the same columns"
-        
-        sparsities = []
-        for i in range(len(original_df)):
-            if counterfactuals[i]['counterfactual_features'] is not None:
-                changes = sum(1 for col in original_df.columns 
-                             if original_df[col].iloc[i] != counterfactual_df[col].iloc[i])
-                sparsities.append(changes)
-        sparsity = round(sum(sparsities) / len(sparsities), 4) if sparsities else 0
-    logger.debug(f"Sparsity KPI: {sparsity}")
-    
-    # Calculate actionability
-    actionability_scores = [
-        calculate_actionability(cf['original_features'], cf['counterfactual_features'], 
-                              constraints, feature_columns)
-        for cf in counterfactuals if cf['counterfactual_features'] is not None
-    ]
-    actionability = np.mean(actionability_scores) if actionability_scores else 0
-    logger.debug(f"Mean actionability of counterfactuals: {actionability:.2f}")
-    
-    return coverage, distance, implausibility, sparsity, actionability
-
-
-def get_diversity(counterfactual_df: pd.DataFrame):
-    """
-    Calculate diversity of counterfactuals for a unique sample. 
-    Diversity is the smallest distance of a counterfactual with his furthest neighbor.
-
-    Args:
-        counterfactual_df: DataFrame of counterfactual samples.
-
-    Returns:
-        Diversity score (Higher value means better diversity).
-    """
-    if counterfactual_df.empty:
-        return 0.0
-    
-    diversities = []
-    num_counterfactuals = len(counterfactual_df)
-
-    # For each counterfactual, calculate the distance to all others and store the maximum distance
-    for i in range(num_counterfactuals):
-        distances = []
-        for j in range(num_counterfactuals):
-            if i != j:
-                dist = calculate_distance(counterfactual_df.iloc[i].values[:-1], 
-                                          counterfactual_df.iloc[j].values[:-1])
-                distances.append(dist)
-        if distances:
-            diversities.append(min(distances))
-    print(diversities)
-    diversity = round(min(diversities),2) if diversities else 0.0
-
-    return diversity
-
 def generate_counterfactuals(ppo_model: PPO, env: PPOEnv, dataset_path: str, 
                             save_path: Optional[str] = None, specific_indices: Optional[List[int]] = None,
                             max_steps_per_sample: int = Config.MAX_STEPS_PER_SAMPLE, 
@@ -545,6 +398,8 @@ def generate_counterfactuals(ppo_model: PPO, env: PPOEnv, dataset_path: str,
     """
     logger = logging.getLogger(__name__)
     logger.info("Generating counterfactuals...")
+    feature_dim = env.observation_space.shape[0]
+    print(f"Feature dimension: {feature_dim}")
     
     dataset_utils = DatasetUtils(dataset_path, verbose)
     env.use_random_sampling = False
@@ -636,6 +491,7 @@ def generate_single_counterfactual(env: PPOEnv, ppo_model: PPO, mcts: Optional[P
     success, best_info, total_steps = False, None, 0
     
     for tries in range(max_tries):
+    #for tries in tqdm(range(max_tries), desc=f"Generating counterfactuals, tries: {max_tries}"):
         obs = env.reset()
         done, steps = False, 0
         while not done and steps < max_steps:
@@ -750,6 +606,152 @@ def generate_multiple_counterfactuals_for_sample(ppo_model: PPO, env: PPOEnv, da
     env.use_random_sampling = True
     return counterfactuals, original_df, counterfactual_df
 
+def calculate_actionability(original_features: np.ndarray, counterfactual_features: np.ndarray, 
+                           constraints: Dict[str, str], feature_columns: List[str]) -> int:
+    """
+    Calculate actionability score for a counterfactual based on constraints.
+
+    Args:
+        original_features: Original feature values.
+        counterfactual_features: Counterfactual feature values.
+        constraints: Dictionary of feature constraints.
+        feature_columns: List of feature column names.
+
+    Returns:
+        Actionability score (1 if all fixed features unchanged, 0 otherwise).
+    """
+    if not constraints:
+        return 1
+    for feature, constraint in constraints.items():
+        if constraint == "fixed":
+            idx = feature_columns.index(feature)
+            if original_features[idx] != counterfactual_features[idx]:
+                return 0
+    return 1
+
+def calculate_distance(original_features: np.ndarray, modified_features: np.ndarray) -> float:
+    """
+    Calculate L1 (Manhattan) distance between original and modified features.
+
+    Args:
+        original_features: Original feature vector.
+        modified_features: Modified feature vector.
+
+    Returns:
+        L1 distance between the feature vectors.
+    """
+    categorical_indices = [i for i, feature in enumerate(original_features) 
+                          if isinstance(feature, (str, bool))]
+    dist = 0
+    for i, (o, m) in enumerate(zip(original_features, modified_features)):
+        dist += float(o != m) if i in categorical_indices else abs(o - m)
+    return dist
+
+def get_metrics(original_df: pd.DataFrame, counterfactual_df: pd.DataFrame, counterfactuals: List[Dict],
+                constraints: Dict[str, str], feature_columns: List[str], original_data: pd.DataFrame,
+                verbose: int = 0) -> Tuple[float, float, float, float, float]:
+    """
+    Calculate KPIs for generated counterfactuals.
+
+    Args:
+        original_df: DataFrame of original samples.
+        counterfactual_df: DataFrame of counterfactual samples.
+        counterfactuals: List of counterfactual dictionaries.
+        constraints: Dictionary of feature constraints.
+        feature_columns: List of feature column names.
+        original_data: Original dataset for implausibility calculation.
+        verbose: Verbosity level for logging.
+
+    Returns:
+        Tuple of (coverage, distance, implausibility, sparsity, actionability).
+    """
+    logger = logging.getLogger(__name__)
+    logger.debug(f"Calculating KPIs for {len(counterfactuals)} counterfactuals...")
+    
+    if not counterfactuals:
+        logger.warning("No counterfactuals generated. Returning default KPIs.")
+        return 0, 0, 0, 0, 0
+    
+    # Calculate coverage
+    success_count = sum(cf['success'] for cf in counterfactuals)
+    num_samples = len(counterfactuals)
+    coverage = success_count / num_samples if num_samples > 0 else 0
+    logger.debug(f"Coverage: {coverage:.2%} ({success_count}/{num_samples})")
+    
+    # Calculate distance
+    distance = np.mean([cf['distance'] for cf in counterfactuals]) if counterfactuals else 0
+    logger.debug(f"Mean distance of counterfactuals: {distance:.2f}")
+    
+    # Calculate implausibility
+    implausibility_scores = []
+    for cf in counterfactuals:
+        if cf['counterfactual_features'] is not None:
+            cfe = np.concatenate((cf['counterfactual_features'], [cf['counterfactual_prediction']]))
+            closest_sample = get_closest_samples(cfe, original_data, X=5, require_different_outcome=False).iloc[0]
+            implausibility_scores.append(calculate_distance(cfe[:-1], closest_sample[:-1]))
+    implausibility = np.mean(implausibility_scores) if implausibility_scores else 0
+    logger.debug(f"Mean implausibility of counterfactuals: {implausibility:.2f}")
+    
+    # Calculate sparsity
+    sparsity = 0
+    if len(original_df) > 0 and len(counterfactual_df) > 0:
+        assert len(original_df) == len(counterfactual_df), \
+            "Original and counterfactual DataFrames must have the same length"
+        assert original_df.columns.tolist() == counterfactual_df.columns.tolist(), \
+            "Original and counterfactual DataFrames must have the same columns"
+        
+        sparsities = []
+        for i in range(len(original_df)):
+            if counterfactuals[i]['counterfactual_features'] is not None:
+                changes = sum(1 for col in original_df.columns 
+                             if original_df[col].iloc[i] != counterfactual_df[col].iloc[i])
+                sparsities.append(changes)
+        sparsity = round(sum(sparsities) / len(sparsities), 4) if sparsities else 0
+    logger.debug(f"Sparsity KPI: {sparsity}")
+    
+    # Calculate actionability
+    actionability_scores = [
+        calculate_actionability(cf['original_features'], cf['counterfactual_features'], 
+                              constraints, feature_columns)
+        for cf in counterfactuals if cf['counterfactual_features'] is not None
+    ]
+    actionability = np.mean(actionability_scores) if actionability_scores else 0
+    logger.debug(f"Mean actionability of counterfactuals: {actionability:.2f}")
+    
+    return coverage, distance, implausibility, sparsity, actionability
+
+def get_diversity(counterfactual_df: pd.DataFrame):
+    """
+    Calculate diversity of counterfactuals for a unique sample. 
+    Diversity is the smallest distance of a counterfactual with his furthest neighbor.
+
+    Args:
+        counterfactual_df: DataFrame of counterfactual samples.
+
+    Returns:
+        Diversity score (Higher value means better diversity).
+    """
+    if counterfactual_df.empty:
+        return 0.0
+    
+    diversities = []
+    num_counterfactuals = len(counterfactual_df)
+
+    # For each counterfactual, calculate the distance to all others and store the maximum distance
+    for i in range(num_counterfactuals):
+        distances = []
+        for j in range(num_counterfactuals):
+            if i != j:
+                dist = calculate_distance(counterfactual_df.iloc[i].values[:-1], 
+                                          counterfactual_df.iloc[j].values[:-1])
+                distances.append(dist)
+        if distances:
+            diversities.append(min(distances))
+    print(diversities)
+    diversity = round(min(diversities),2) if diversities else 0.0
+
+    return diversity
+
 def main():
     """Main function to train or load PPO model and generate counterfactuals."""
     logger = logging.getLogger(__name__)
@@ -771,33 +773,47 @@ def main():
     )
     
     if ppo_model is not None:
-        # logger.info("Generating counterfactuals using standard PPO...")
-        # generate_counterfactuals(
-        #     ppo_model=ppo_model,
-        #     env=env,
-        #     dataset_path=dataset_path,
-        #     save_path=os.path.join(Config.DATA_DIR, 
-        #                           f"generated_counterfactuals_ppo_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
-        #     max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
-        #     use_mcts=False,
-        #     specific_indices=indices_to_use,
-        #     verbose=1
-        # )
-
-        logger.info("Generating multiple counterfactuals for a specific sample...")
-        sample_index = 0  # Change this to the desired sample index
-        _, _, counterfactual_df = generate_multiple_counterfactuals_for_sample(
+        logger.info("Generating counterfactuals using standard PPO...")
+        generate_counterfactuals(
             ppo_model=ppo_model,
             env=env,
             dataset_path=dataset_path,
-            sample_index=sample_index,
-            num_counterfactuals=25,
             save_path=os.path.join(Config.DATA_DIR, 
-                                  f"generated_counterfactuals_sample_{sample_index}.csv"),
+                                  f"generated_counterfactuals_mcts_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
             max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
-            use_mcts=False,
+            use_mcts=True,
+            mcts_simulations=Config.MCTS_SIMULATIONS,
+            specific_indices=indices_to_use,
             verbose=1
         )
+
+        generate_counterfactuals(
+            ppo_model=ppo_model,
+            env=env,
+            dataset_path=dataset_path,
+            save_path=os.path.join(Config.DATA_DIR, 
+                                  f"generated_counterfactuals_ppo_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
+            max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
+            use_mcts=False,
+            mcts_simulations=Config.MCTS_SIMULATIONS,
+            specific_indices=indices_to_use,
+            verbose=1
+        )
+
+        # logger.info("Generating multiple counterfactuals for a specific sample...")
+        # sample_index = 0  # Change this to the desired sample index
+        # _, _, counterfactual_df = generate_multiple_counterfactuals_for_sample(
+        #     ppo_model=ppo_model,
+        #     env=env,
+        #     dataset_path=dataset_path,
+        #     sample_index=sample_index,
+        #     num_counterfactuals=25,
+        #     save_path=os.path.join(Config.DATA_DIR, 
+        #                           f"generated_counterfactuals_sample_{sample_index}.csv"),
+        #     max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
+        #     use_mcts=False,
+        #     verbose=1
+        # )
 
 if __name__ == "__main__":
     main()
