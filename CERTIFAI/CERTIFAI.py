@@ -4,6 +4,7 @@ Created on Mon Dec 14 10:37:55 2020
 
 @author: Iacopo
 """
+import os
 import re
 import numpy as np
 import pandas as pd
@@ -17,6 +18,50 @@ from tqdm import tqdm
 
 
 class CERTIFAI:
+    def save_counterfactuals_to_csv(self, filename):
+        """
+        Save all generated counterfactuals to a CSV file and a CSV with the original samples.
+        If there is no counterfactual for a sample, it will include the original sample and 0 in the column 'counterfactual_found', instead of 1
+        Each row contains only the counterfactual features of the sample and if it's a counterfactual.
+        """
+        if self.results is None or len(self.results) == 0:
+            print("No counterfactuals to save.")
+            return
+
+        counterfactual_rows = []
+        original_rows = []
+        for sample_idx, (sample, counterfacts, distances) in enumerate(self.results):
+            orig = sample.values[0] if hasattr(sample, 'values') else sample[0]
+            # Save original sample
+            original_row = {col: orig[idx] for idx, col in enumerate(sample.columns)}
+            original_row['sample_id'] = sample_idx
+            original_rows.append(original_row)
+
+            if len(counterfacts) == 0:
+                # No counterfactuals: include original features with counterfactual_found=0
+                row = {col: orig[idx] for idx, col in enumerate(sample.columns)}
+                row['sample_id'] = sample_idx
+                row['counterfactual_found'] = 0
+                counterfactual_rows.append(row)
+            else:
+                # Save each counterfactual with counterfactual_found=1
+                for cf in counterfacts:
+                    row = {col: cf[idx] for idx, col in enumerate(sample.columns)}
+                    row['sample_id'] = sample_idx
+                    row['counterfactual_found'] = 1
+                    counterfactual_rows.append(row)
+
+        # Create DataFrames
+        counterfactual_df = pd.DataFrame(counterfactual_rows)
+        original_df = pd.DataFrame(original_rows)
+
+        # Save to CSVs
+        counterfactual_df.to_csv(filename, index=False)
+        original_filename = f"{os.path.splitext(filename)[0]}_original.csv"
+        original_df.to_csv(original_filename, index=False)
+        print(f"Counterfactuals saved to {filename}")
+        print(f"Original samples saved to {original_filename}")
+
     def __init__(self, Pm = .2, Pc = .5, dataset_path = None,
                  numpy_dataset = None, label_encoders = None, scaler = None):
         """The class instance is initialised with the probabilities needed
@@ -449,7 +494,9 @@ class CERTIFAI:
                 temp = []
                 for constraint in self.constraints:
                     if not isinstance(constraint, tuple):
-                        temp.append(sample.loc[:, constraint].values)
+                        # Repeat the fixed value for the whole population
+                        fixed_value = sample.loc[:, constraint].values[0]
+                        temp.append(np.full((self.Population, 1), fixed_value))
                     else:
                         temp.append(np.random.randint(constraint[0]*100, (constraint[1]+1)*100,
                                                     size=(self.Population, 1))/100)
@@ -481,10 +528,27 @@ class CERTIFAI:
             generation = pd.DataFrame(generation, columns=sample.columns.tolist())  # Set column names here
         
         for i in sample:
-            generation[i] = generation[i].astype(sample[i].dtype)
+            col_dtype = sample[i].dtype
+            # If the column is integer, but values are strings, convert to float first
+            if np.issubdtype(col_dtype, np.integer):
+                # Try to convert to float first if needed, then round and cast to int
+                try:
+                    generation[i] = np.round(generation[i].astype(float)).astype(int)
+                except Exception:
+                    # Fallback: leave as is
+                    pass
+            elif np.issubdtype(col_dtype, np.floating):
+                try:
+                    generation[i] = generation[i].astype(float)
+                except Exception:
+                    pass
+            else:
+                try:
+                    generation[i] = generation[i].astype(col_dtype)
+                except Exception:
+                    pass
         
         return generation.values.tolist(), distances
-                    
     
     def mutate(self, counterfacts_list):
         '''Function to perform the mutation step from the original paper
@@ -698,8 +762,6 @@ class CERTIFAI:
                 final_generation = crossed_generation.loc[diff_prediction]
                 
                 if len(final_generation) == 0:
-                    if verbose:
-                        print(f"No valid counterfactuals found for sample {i} in generation {g}. Skipping distance calculation.")
                     not_found += 1
                     continue
                 

@@ -6,4 +6,62 @@
     X        Intégrer la diversité et plausibilité
 
 
+diabetes
 
+INFO:__main__:Coverage: 95.00% (95/100)
+INFO:__main__:Mean distance of counterfactuals: 60.78
+INFO:__main__:Mean implausibility of counterfactuals: 33.68
+INFO:__main__:Sparsity KPI: 2.27
+INFO:__main__:Mean actionability of counterfactuals: 1.00
+INFO:__main__:Total time: 36.04 seconds
+
+INFO:__main__:Coverage: 97.00% (97/100)
+INFO:__main__:Mean distance of counterfactuals: 58.70
+INFO:__main__:Mean implausibility of counterfactuals: 34.90
+INFO:__main__:Sparsity KPI: 1.25
+INFO:__main__:Mean actionability of counterfactuals: 1.00
+INFO:__main__:Total time: 37.26 seconds
+
+Generating counterfactuals: 100%|██████| 100/100 [00:22<00:00,  4.52it/s] 
+INFO:__main__:
+Final statistics :
+INFO:__main__:Coverage: 99.00% (99/100)
+INFO:__main__:Mean distance of counterfactuals: 35.03
+INFO:__main__:Mean sparsity: 1.33
+INFO:__main__:Mean implausibility: 27.05
+INFO:__main__:Mean actionability: 1.00
+INFO:__main__:Diversity: 7.03
+INFO:__main__:Average steps per successful counterfactual: 161.76
+INFO:__main__:Total time: 42.03 seconds
+
+
+adult
+
+INFO:__main__:Coverage: 99.00% (99/100)
+INFO:__main__:Mean distance of counterfactuals: 17711.86
+INFO:__main__:Mean sparsity: 4.64
+INFO:__main__:Mean implausibility: 269.28
+INFO:__main__:Mean actionability: 1.00
+INFO:__main__:Diversity: 83.00
+INFO:__main__:Average steps per successful counterfactual: 449.29
+INFO:__main__:Total time: 251.55 seconds
+
+certifai adult : 
+
+INFO:__main__:Coverage: 100.00% (100/100)
+INFO:__main__:Mean distance: 25543.85
+INFO:__main__:Mean implausibility: 14347.96
+INFO:__main__:Mean sparsity: 13.09
+INFO:__main__:Mean actionability: 1.00
+INFO:__main__:Diversity: 920.00
+Coverage: 100.00%, Distance: 25543.85, Implausibility: 14347.96, Sparsity: 13.09, Actionability: 1.00, Diversity: 920.00
+
+
+
+breast_cancer ppo
+INFO:utils:Coverage: 100.00% (100/100)
+INFO:utils:Mean distance: 3.03
+INFO:utils:Mean implausibility: 2.38
+INFO:utils:Mean sparsity: 3.03
+INFO:utils:Mean actionability: 1.00
+INFO:utils:Diversity: 0.00

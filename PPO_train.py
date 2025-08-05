@@ -22,9 +22,9 @@ logging.basicConfig(level=logging.INFO)
 
 class Config:
     """Configuration constants for PPO training and counterfactual generation."""
-    DATASET_NAME: str = 'diabetes'
+    DATASET_NAME: str = 'adult'
     DATASET_PATH: str = os.path.join('data', f'{DATASET_NAME}.csv')
-    TOTAL_TIMESTEPS: int = 50000
+    TOTAL_TIMESTEPS: int = 75000
     # Types of constraints : increase, decrease (only for numerical features), fixed (any feature)
     CONSTRAINTS: Dict[str, str] =  {}
     SAVE_DIR: str = 'ppo_models'
@@ -45,11 +45,13 @@ class Config:
     EVAL_FREQ: int = 5000
     N_EVAL_EPISODES: int = 10
     CHECKPOINT_SAVE_FREQ: int = 50000
-    MAX_STEPS_PER_SAMPLE: int = 100
-    MAX_TRIES: int = 5
-    MCTS_SIMULATIONS: int = 10
+    MAX_STEPS_PER_SAMPLE: int = 250
+    MAX_TRIES: int = 50
+    MCTS_SIMULATIONS: int = 15
+    # Use a random selection of 100 indices from the dataset for evaluation
+    INDICES_TO_USE: Optional[List[int]] = list(range(100)) #np.random.choice(200, size=100, replace=False).tolist()
     # Training mode options: 'new', 'load', or 'continue'
-    TRAINING_MODE: str = 'load'
+    TRAINING_MODE: str = 'new'
 
 class DatasetUtils:
     """Utility class for dataset handling."""
@@ -123,6 +125,53 @@ class ResultSaver:
         os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
         df.to_csv(save_path, index=False)
         self._log(f"Saved counterfactuals to {save_path}")
+
+    def save_counterfactuals_to_csv(self, counterfactuals: List[Dict], original_df: pd.DataFrame, 
+                                   counterfactual_df: pd.DataFrame, save_path: str) -> None:
+        """
+        Save counterfactuals and original samples to CSV files in a format compatible with utils.get_metrics.
+        
+        Args:
+            counterfactuals: List of counterfactual dictionaries containing sample_id, counterfactual_features, etc.
+            original_df: DataFrame of original samples.
+            counterfactual_df: DataFrame of counterfactual samples.
+            save_path: Path to save the counterfactual CSV file (original CSV will append '_original').
+        """
+        counterfactual_rows = []
+        original_rows = []
+        
+        feature_columns = original_df.columns.tolist()
+        
+        for i, cf in enumerate(counterfactuals):
+            sample_id = cf['sample_id']
+            # Save original sample
+            original_row = {col: original_df.iloc[i][col] for col in feature_columns}
+            original_row['sample_id'] = sample_id
+            original_rows.append(original_row)
+            
+            # Save counterfactual or original features if no counterfactual
+            if cf['counterfactual_features'] is not None and cf['success']:
+                row = {col: counterfactual_df.iloc[i][col] for col in feature_columns}
+                row['sample_id'] = sample_id
+                row['counterfactual_found'] = 1
+            else:
+                row = {col: original_df.iloc[i][col] for col in feature_columns}
+                row['sample_id'] = sample_id
+                row['counterfactual_found'] = 0
+            counterfactual_rows.append(row)
+        
+        # Create DataFrames
+        counterfactual_df_out = pd.DataFrame(counterfactual_rows)
+        original_df_out = pd.DataFrame(original_rows)
+        
+        # Save to CSVs
+        os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+        counterfactual_df_out.to_csv(save_path, index=False)
+        original_filename = f"{os.path.splitext(save_path)[0]}_original.csv"
+        original_df_out.to_csv(original_filename, index=False)
+        
+        self._log(f"Counterfactuals saved to {save_path}")
+        self._log(f"Original samples saved to {original_filename}")
 
     def _log(self, message: str, level: str = 'info') -> None:
         """Log messages based on verbosity level."""
@@ -334,10 +383,12 @@ def train_ppo_for_counterfactuals(dataset_path: str, model_path: Optional[str] =
     label_encoders, scaler = load_encoders_and_scaler(model_path or 
                                                      f"classification_models/{dataset_name}_model.pt")
     
+    max_steps = Config.MAX_STEPS_PER_SAMPLE
+    
     env = PPOEnv(dataset_path=dataset_path, model=classifier, label_encoders=label_encoders, 
-                 scaler=scaler, constraints=constraints, use_random_sampling=True, verbose=verbose)
+                 scaler=scaler, constraints=constraints, use_random_sampling=True, max_steps=max_steps, verbose=verbose)
     eval_env = PPOEnv(dataset_path=dataset_path, model=classifier, label_encoders=label_encoders, 
-                      scaler=scaler, constraints=constraints, use_random_sampling=True, verbose=verbose)
+                      scaler=scaler, constraints=constraints, use_random_sampling=True, max_steps=max_steps,verbose=verbose)
     
     ppo_model_path = os.path.join(save_dir, f"{Config.CHECKPOINT_PREFIX}_{dataset_name}_final.zip")
     model = initialize_ppo_model(ppo_model_path, env, logs_dir, mode, dataset_name, verbose)
@@ -447,24 +498,8 @@ def generate_counterfactuals(ppo_model: PPO, env: PPOEnv, dataset_path: str,
     original_df = pd.DataFrame(original_samples, columns=dataset_utils.feature_columns)
     counterfactual_df = pd.DataFrame(counterfactual_samples, columns=dataset_utils.feature_columns)
     
-    if counterfactuals:
-        coverage, distance, implausibility, sparsity, actionability = get_metrics(
-            original_df, counterfactual_df, counterfactuals, env.constraints, 
-            dataset_utils.feature_columns, dataset_utils.dataset, verbose=0)
-        logger.info("\nFinal statistics:")
-        logger.info(f"Coverage: {coverage:.2%} ({success_count}/{len(indices_to_use)})")
-        logger.info(f"Mean distance of counterfactuals: {distance:.2f}")
-        logger.info(f"Mean implausibility of counterfactuals: {implausibility:.2f}")
-        logger.info(f"Sparsity KPI: {sparsity}")
-        logger.info(f"Mean actionability of counterfactuals: {actionability:.2f}")
-    
-    logger.info(f"Total time: {time.time() - start_time:.2f} seconds")
-    
     if save_path and counterfactuals:
-        result_saver.save_counterfactuals(counterfactuals, dataset_utils.dataset, save_path)
-        kpi_base_path = os.path.splitext(save_path)[0]
-        original_df.to_csv(f"{kpi_base_path}_original.csv", index=False)
-        counterfactual_df.to_csv(f"{kpi_base_path}_counterfactual.csv", index=False)
+        result_saver.save_counterfactuals_to_csv(counterfactuals, original_df, counterfactual_df, save_path)
     
     env.use_random_sampling = True
     return counterfactuals, original_df, counterfactual_df
@@ -649,7 +684,7 @@ def calculate_distance(original_features: np.ndarray, modified_features: np.ndar
 
 def get_metrics(original_df: pd.DataFrame, counterfactual_df: pd.DataFrame, counterfactuals: List[Dict],
                 constraints: Dict[str, str], feature_columns: List[str], original_data: pd.DataFrame,
-                verbose: int = 0) -> Tuple[float, float, float, float, float]:
+                verbose: int = 1) -> Tuple[float, float, float, float, float]:
     """
     Calculate KPIs for generated counterfactuals.
 
@@ -731,6 +766,7 @@ def get_diversity(counterfactual_df: pd.DataFrame):
     Returns:
         Diversity score (Higher value means better diversity).
     """
+    logger = logging.getLogger(__name__)
     if counterfactual_df.empty:
         return 0.0
     
@@ -747,7 +783,7 @@ def get_diversity(counterfactual_df: pd.DataFrame):
                 distances.append(dist)
         if distances:
             diversities.append(min(distances))
-    print(diversities)
+    logger.debug(diversities)
     diversity = round(min(diversities),2) if diversities else 0.0
 
     return diversity
@@ -759,7 +795,7 @@ def main():
     
     dataset_path = Config.DATASET_PATH
     constraints = Config.CONSTRAINTS
-    indices_to_use = list(range(100))
+    indices_to_use = Config.INDICES_TO_USE
     
     logger.info("Processing PPO model...")
     ppo_model, env = train_ppo_for_counterfactuals(
@@ -774,18 +810,18 @@ def main():
     
     if ppo_model is not None:
         logger.info("Generating counterfactuals using standard PPO...")
-        generate_counterfactuals(
-            ppo_model=ppo_model,
-            env=env,
-            dataset_path=dataset_path,
-            save_path=os.path.join(Config.DATA_DIR, 
-                                  f"generated_counterfactuals_mcts_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
-            max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
-            use_mcts=True,
-            mcts_simulations=Config.MCTS_SIMULATIONS,
-            specific_indices=indices_to_use,
-            verbose=1
-        )
+        # generate_counterfactuals(
+        #     ppo_model=ppo_model,
+        #     env=env,
+        #     dataset_path=dataset_path,
+        #     save_path=os.path.join(Config.DATA_DIR, 
+        #                           f"generated_counterfactuals_mcts_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
+        #     max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
+        #     use_mcts=True,
+        #     mcts_simulations=Config.MCTS_SIMULATIONS,
+        #     specific_indices=indices_to_use,
+        #     verbose=1
+        # )
 
         generate_counterfactuals(
             ppo_model=ppo_model,

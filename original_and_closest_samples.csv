@@ -1,7 +1,7 @@
-Pregnancies,Glucose,BloodPressure,SkinThickness,Insulin,BMI,DiabetesPedigreeFunction,Age,distance,Outcome
-1.0,163.0,90.0,51.0,220.0,49.7,0.325,31.0,0.0,1.0
-1.0,122.0,90.0,51.0,220.0,49.7,0.325,31.0,41.0,1.0
-5.0,158.0,84.0,41.0,210.0,39.4,0.395,29.0,47.370000000000005,1.0
-1.0,119.0,86.0,39.0,220.0,45.6,0.808,29.0,66.583,1.0
-0.0,165.0,76.0,43.0,255.0,47.9,0.259,26.0,66.86600000000001,0.0
-8.0,167.0,106.0,46.0,231.0,37.6,0.165,43.0,67.25999999999999,1.0
+age,workclass,fnlwgt,education,education-num,marital-status,occupation,relationship,race,sex,capital-gain,capital-loss,hours-per-week,native-country,distance,income
+90, Local-gov,125927, 7th-8th,4, Married-civ-spouse, Farming-fishing, Wife, Other, Male,0,0,32, United-States,0.0,1
+31, Local-gov,125927, 7th-8th,4, Married-civ-spouse, Farming-fishing, Husband, White, Male,0,0,40, United-States,69.0, <=50K
+38, Federal-gov,125933, Masters,14, Married-civ-spouse, Prof-specialty, Husband, White, Male,0,0,40, Iran,82.0, >50K
+49, Self-emp-inc,125892, Masters,14, Married-civ-spouse, Exec-managerial, Husband, White, Male,0,0,50, United-States,109.0, >50K
+47, Private,125892, Some-college,10, Married-civ-spouse, Craft-repair, Husband, White, Male,0,0,75, United-States,132.0, >50K
+51, Private,126010, HS-grad,9, Married-civ-spouse, Craft-repair, Husband, White, Male,0,0,40, United-States,140.0, <=50K

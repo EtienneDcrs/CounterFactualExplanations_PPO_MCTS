@@ -188,6 +188,8 @@ class PPOMCTS:
             if action_probs[action_idx] < 0.005:
                 continue
             next_state, reward, done, info = virtual_env.step(action_idx)
+            reward += self.MCTS_reward(virtual_env.calculate_distance(
+                virtual_env.original_features, virtual_env.modified_features))
             if next_state.shape[0] != self.env.observation_space.shape[0]:
                 raise ValueError(f"Next state has {next_state.shape[0]} features, but {self.env.observation_space.shape[0]} expected")
             child = MCTSNode(
@@ -211,6 +213,8 @@ class PPOMCTS:
         if self._is_terminal_state(node.state):
             counterfactual_found = virtual_env.current_prediction != virtual_env.original_prediction
             reward = virtual_env.calculate_reward(counterfactual_found=counterfactual_found)
+            reward += self.MCTS_reward(virtual_env.calculate_distance(
+                virtual_env.original_features, virtual_env.modified_features))
             value = reward
         else:
             with torch.no_grad():
@@ -239,6 +243,8 @@ class PPOMCTS:
             virtual_env = copy.deepcopy(self.env)
             self._set_env_state(virtual_env, parent.state)
             _, reward, _, _ = virtual_env.step(action)
+            reward += self.MCTS_reward(virtual_env.calculate_distance(
+                virtual_env.original_features, virtual_env.modified_features))
             
             # Approximate KL term if reference policy is unavailable
             try:
@@ -267,6 +273,30 @@ class PPOMCTS:
         return (virtual_env.current_prediction != virtual_env.original_prediction or
                 virtual_env.steps_taken >= virtual_env.max_steps)
     
+
+    def MCTS_reward(self, distance):
+        """
+        Calculate the MCTS reward based on distance.
+        """
+        if distance < 5:
+            return 50
+        elif distance < 20:
+            return 30
+        elif distance < 100:
+            return 20
+        elif distance < 500:
+            return 10
+        elif distance < 1000:
+            return 0
+        elif distance < 5000:
+            return -10
+        elif distance < 10000:
+            return -25
+        else:
+            return -40
+        
+
+
     def run_mcts(self, root_state, temperature=2.0):
         """
         Run the full MCTS process to find the best action.

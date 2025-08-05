@@ -64,7 +64,6 @@ class DatasetHandler:
 
 class PPOEnv(gym.Env):
     # Configuration Constants
-    MAX_STEPS: int = 100
     RANDOMISATION_THRESHOLD: int = 40
     INITIAL_TEMPERATURE: float = 0.05
     MAX_TEMPERATURE: float = 10.0
@@ -72,6 +71,7 @@ class PPOEnv(gym.Env):
     def __init__(self, dataset_path: Optional[str] = None, numpy_dataset: Optional[np.ndarray] = None,
                  model=None, distance_metric: Optional[Callable] = None, label_encoders: Optional[Dict] = None,
                  scaler=None, constraints: Optional[Dict[str, str]] = None, use_random_sampling: bool = True,
+                 max_steps: int = 100,
                  verbose: int = 1):
         """
         Initialize the PPO environment for counterfactual generation.
@@ -130,7 +130,7 @@ class PPOEnv(gym.Env):
         self.original_encoded = None
         self.modified_encoded = None
         self.steps_taken = 0
-        self.max_steps = self.MAX_STEPS
+        self.max_steps = max_steps
         self.done = False
         self._obs_space_updated = False
 

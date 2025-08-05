@@ -1,0 +1,4 @@
+Model,Coverage,Distance,Sparsity,Implausibility,Diversity,Actionnability
+CERTIFAI,100,102.01,8.36,77.33,38.45,100%
+DiCE,100,93.21,1.61,60.10,25.56,100%
+PPO,99,65.27,2.03,46.06,1.20,100%
