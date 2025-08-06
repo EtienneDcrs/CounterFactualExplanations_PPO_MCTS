@@ -252,8 +252,8 @@ def get_metrics(original_csv_path: str, counterfactual_csv_path: str, constraint
     return coverage, distance, implausibility, sparsity, actionability, diversity
 if __name__ == "__main__":
     # Example usage
-    original_csv = "certifai_adult_original.csv"
-    counterfactual_csv = "certifai_adult.csv"
+    original_csv = "data/generated_counterfactuals_ppo_breast_cancer_original.csv"
+    counterfactual_csv = "data/generated_counterfactuals_ppo_breast_cancer.csv"
     constraints = {}
     coverage, distance, implausibility, sparsity, actionability, diversity = get_metrics(original_csv, counterfactual_csv, constraints)
     print(f"Coverage: {coverage:.2%}, Distance: {distance:.2f}, Implausibility: {implausibility:.2f}, "

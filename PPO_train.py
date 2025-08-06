@@ -22,9 +22,9 @@ logging.basicConfig(level=logging.INFO)
 
 class Config:
     """Configuration constants for PPO training and counterfactual generation."""
-    DATASET_NAME: str = 'adult'
+    DATASET_NAME: str = 'breast_cancer'
     DATASET_PATH: str = os.path.join('data', f'{DATASET_NAME}.csv')
-    TOTAL_TIMESTEPS: int = 75000
+    TOTAL_TIMESTEPS: int = 400000
     # Types of constraints : increase, decrease (only for numerical features), fixed (any feature)
     CONSTRAINTS: Dict[str, str] =  {}
     SAVE_DIR: str = 'ppo_models'
@@ -51,7 +51,7 @@ class Config:
     # Use a random selection of 100 indices from the dataset for evaluation
     INDICES_TO_USE: Optional[List[int]] = list(range(100)) #np.random.choice(200, size=100, replace=False).tolist()
     # Training mode options: 'new', 'load', or 'continue'
-    TRAINING_MODE: str = 'new'
+    TRAINING_MODE: str = 'continue'
 
 class DatasetUtils:
     """Utility class for dataset handling."""
