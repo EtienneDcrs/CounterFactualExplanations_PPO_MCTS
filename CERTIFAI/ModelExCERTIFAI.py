@@ -22,6 +22,9 @@ def run_certifai_and_metrics():
         {'url': 'data/diabetes.csv', 'model': 'diabetes_model.pt', 'constraints': {}},
         {'url': 'data/adult.csv', 'model': 'adult_model.pt', 'constraints': {'sex': 'fixed'}}
     ]
+    datasets = [
+        {'url': 'data/bank.csv', 'model': 'bank_model.pt', 'constraints': {}}
+    ]
     
     # Process each dataset
     for dataset in datasets:

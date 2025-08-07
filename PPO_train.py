@@ -22,9 +22,9 @@ logging.basicConfig(level=logging.INFO)
 
 class Config:
     """Configuration constants for PPO training and counterfactual generation."""
-    DATASET_NAME: str = 'breast_cancer'
+    DATASET_NAME: str = 'bank'
     DATASET_PATH: str = os.path.join('data', f'{DATASET_NAME}.csv')
-    TOTAL_TIMESTEPS: int = 400000
+    TOTAL_TIMESTEPS: int = 75000
     # Types of constraints : increase, decrease (only for numerical features), fixed (any feature)
     CONSTRAINTS: Dict[str, str] =  {}
     SAVE_DIR: str = 'ppo_models'
@@ -47,11 +47,11 @@ class Config:
     CHECKPOINT_SAVE_FREQ: int = 50000
     MAX_STEPS_PER_SAMPLE: int = 250
     MAX_TRIES: int = 50
-    MCTS_SIMULATIONS: int = 15
+    MCTS_SIMULATIONS: int = 10
     # Use a random selection of 100 indices from the dataset for evaluation
-    INDICES_TO_USE: Optional[List[int]] = list(range(100)) #np.random.choice(200, size=100, replace=False).tolist()
+    INDICES_TO_USE: Optional[List[int]] = list(range(25)) #np.random.choice(200, size=100, replace=False).tolist()
     # Training mode options: 'new', 'load', or 'continue'
-    TRAINING_MODE: str = 'continue'
+    TRAINING_MODE: str = 'load'
 
 class DatasetUtils:
     """Utility class for dataset handling."""
@@ -351,7 +351,9 @@ def train_ppo_for_counterfactuals(dataset_path: str, model_path: Optional[str] =
                                   total_timesteps: int = Config.TOTAL_TIMESTEPS, 
                                   mode: str = Config.TRAINING_MODE, 
                                   constraints: Optional[Dict[str, str]] = None,
-                                  verbose: int = 1) -> Tuple[PPO, PPOEnv]:
+                                  verbose: int = 1,
+                                  output_ppo_model_path: Optional[str] = None
+                                  ) -> Tuple[PPO, PPOEnv]:
     """
     Train or load a PPO agent for counterfactual generation.
 
@@ -364,6 +366,7 @@ def train_ppo_for_counterfactuals(dataset_path: str, model_path: Optional[str] =
         mode: Training mode ('new', 'load', or 'continue').
         constraints: Dictionary of feature constraints (e.g., {"age": "increase"}).
         verbose: Verbosity level for logging.
+        output_ppo_model_path: Optional path where the PPO model will be saved.
 
     Returns:
         Tuple of (PPO model, training environment).
@@ -390,7 +393,8 @@ def train_ppo_for_counterfactuals(dataset_path: str, model_path: Optional[str] =
     eval_env = PPOEnv(dataset_path=dataset_path, model=classifier, label_encoders=label_encoders, 
                       scaler=scaler, constraints=constraints, use_random_sampling=True, max_steps=max_steps,verbose=verbose)
     
-    ppo_model_path = os.path.join(save_dir, f"{Config.CHECKPOINT_PREFIX}_{dataset_name}_final.zip")
+    # Use output_ppo_model_path if provided, else default
+    ppo_model_path = output_ppo_model_path or os.path.join(save_dir, f"{Config.CHECKPOINT_PREFIX}_{dataset_name}_final.zip")
     model = initialize_ppo_model(ppo_model_path, env, logs_dir, mode, dataset_name, verbose)
     
     if mode != 'load':
@@ -810,18 +814,18 @@ def main():
     
     if ppo_model is not None:
         logger.info("Generating counterfactuals using standard PPO...")
-        # generate_counterfactuals(
-        #     ppo_model=ppo_model,
-        #     env=env,
-        #     dataset_path=dataset_path,
-        #     save_path=os.path.join(Config.DATA_DIR, 
-        #                           f"generated_counterfactuals_mcts_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
-        #     max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
-        #     use_mcts=True,
-        #     mcts_simulations=Config.MCTS_SIMULATIONS,
-        #     specific_indices=indices_to_use,
-        #     verbose=1
-        # )
+        generate_counterfactuals(
+            ppo_model=ppo_model,
+            env=env,
+            dataset_path=dataset_path,
+            save_path=os.path.join(Config.DATA_DIR, 
+                                  f"generated_counterfactuals_mcts_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
+            max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE-100,  # Reduced for MCTS
+            use_mcts=True,
+            mcts_simulations=Config.MCTS_SIMULATIONS,
+            specific_indices=indices_to_use,
+            verbose=1
+        )
 
         generate_counterfactuals(
             ppo_model=ppo_model,
@@ -836,20 +840,20 @@ def main():
             verbose=1
         )
 
-        # logger.info("Generating multiple counterfactuals for a specific sample...")
-        # sample_index = 0  # Change this to the desired sample index
-        # _, _, counterfactual_df = generate_multiple_counterfactuals_for_sample(
-        #     ppo_model=ppo_model,
-        #     env=env,
-        #     dataset_path=dataset_path,
-        #     sample_index=sample_index,
-        #     num_counterfactuals=25,
-        #     save_path=os.path.join(Config.DATA_DIR, 
-        #                           f"generated_counterfactuals_sample_{sample_index}.csv"),
-        #     max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
-        #     use_mcts=False,
-        #     verbose=1
-        # )
+        logger.info("Generating multiple counterfactuals for a specific sample...")
+        sample_index = 0  # Change this to the desired sample index
+        _, _, counterfactual_df = generate_multiple_counterfactuals_for_sample(
+            ppo_model=ppo_model,
+            env=env,
+            dataset_path=dataset_path,
+            sample_index=sample_index,
+            num_counterfactuals=25,
+            save_path=os.path.join(Config.DATA_DIR, 
+                                  f"generated_counterfactuals_sample_{sample_index}.csv"),
+            max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
+            use_mcts=False,
+            verbose=1
+        )
 
 if __name__ == "__main__":
     main()
