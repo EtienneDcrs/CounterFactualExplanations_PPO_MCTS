@@ -14,6 +14,9 @@ from closest_samples import get_closest_samples
 from PPO_env import PPOEnv, PPOMonitorCallback
 from Classifier_model import Classifier, evaluate_model_on_full_dataset, train_model
 from PPO_MCTS import PPOMCTS
+# Import GRPO components
+from GRPO_env import GRPOEnv
+from GRPO_train import GRPOTrainer, GRPOPolicy
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -22,7 +25,7 @@ logging.basicConfig(level=logging.INFO)
 
 class Config:
     """Configuration constants for PPO training and counterfactual generation."""
-    DATASET_NAME: str = 'bank'
+    DATASET_NAME: str = 'adult'
     DATASET_PATH: str = os.path.join('data', f'{DATASET_NAME}.csv')
     TOTAL_TIMESTEPS: int = 75000
     # Types of constraints : increase, decrease (only for numerical features), fixed (any feature)
@@ -49,9 +52,14 @@ class Config:
     MAX_TRIES: int = 50
     MCTS_SIMULATIONS: int = 10
     # Use a random selection of 100 indices from the dataset for evaluation
-    INDICES_TO_USE: Optional[List[int]] = list(range(25)) #np.random.choice(200, size=100, replace=False).tolist()
+    INDICES_TO_USE: Optional[List[int]] = list(range(100)) #np.random.choice(200, size=100, replace=False).tolist()
     # Training mode options: 'new', 'load', or 'continue'
-    TRAINING_MODE: str = 'load'
+    TRAINING_MODE: str = 'new'
+    GRPO_TOTAL_ITERATIONS: int = 10
+    GRPO_STEPS_PER_ITERATION: int = 10
+    GRPO_MU_ITERATIONS: int = 4
+    GRPO_GROUP_SIZE: int = 4
+    GRPO_KL_COEF: float = 0.01
 
 class DatasetUtils:
     """Utility class for dataset handling."""
@@ -486,7 +494,7 @@ def generate_counterfactuals(ppo_model: PPO, env: PPOEnv, dataset_path: str,
             'counterfactual_prediction': best_info['modified_prediction'] if best_info else original_prediction,
             'distance': best_info['distance'] if best_info else float('inf'),
             'steps': steps_taken,
-            'tries': Config.MAX_TRIES if not success else steps_taken,
+            'tries': Config.MAX_TRIES,
             'success': success
         })
         original_samples.append(original_features)
@@ -527,10 +535,15 @@ def generate_single_counterfactual(env: PPOEnv, ppo_model: PPO, mcts: Optional[P
         Tuple of (success, best_info, total_steps).
     """
     logger = logging.getLogger(__name__)
-    success, best_info, total_steps = False, None, 0
+    best_info = None
+    best_distance = float('inf')
+    success = False
+    total_steps = 0
     
     for tries in range(max_tries):
-    #for tries in tqdm(range(max_tries), desc=f"Generating counterfactuals, tries: {max_tries}"):
+        if success and tries > 20:
+            #logger.info(f"Found a successful counterfactual after {tries} tries, stopping further attempts.")
+            break
         obs = env.reset()
         done, steps = False, 0
         while not done and steps < max_steps:
@@ -540,13 +553,12 @@ def generate_single_counterfactual(env: PPOEnv, ppo_model: PPO, mcts: Optional[P
             steps += 1
             total_steps += 1
             if info['counterfactual_found']:
-                success, best_info = True, info
-                break
-        if not success:
-            best_info = info
-        if success:
-            break
-    
+                current_distance = info['distance']
+                if current_distance < best_distance:
+                    best_distance = current_distance
+                    best_info = info
+                    success = True
+
     return success, best_info, total_steps
 
 def generate_multiple_counterfactuals_for_sample(ppo_model: PPO, env: PPOEnv, dataset_path: str, 
@@ -608,7 +620,7 @@ def generate_multiple_counterfactuals_for_sample(ppo_model: PPO, env: PPOEnv, da
             'counterfactual_prediction': best_info['modified_prediction'] if best_info else original_prediction,
             'distance': best_info['distance'] if best_info else float('inf'),
             'steps': steps_taken,
-            'tries': Config.MAX_TRIES if not success else steps_taken,
+            'tries': Config.MAX_TRIES,
             'success': success
         })
         original_samples.append(original_features)
@@ -633,7 +645,6 @@ def generate_multiple_counterfactuals_for_sample(ppo_model: PPO, env: PPOEnv, da
         logger.info(f"Diversity: {diversity:.2f}")
         logger.info(f"Average steps per successful counterfactual: {(total_steps / success_count if success_count > 0 else 0):.2f}")
 
-    
     logger.info(f"Total time: {time.time() - start_time:.2f} seconds")
     
     if save_path and counterfactuals:
@@ -645,6 +656,180 @@ def generate_multiple_counterfactuals_for_sample(ppo_model: PPO, env: PPOEnv, da
     env.use_random_sampling = True
     return counterfactuals, original_df, counterfactual_df
 
+def train_grpo_for_counterfactuals(dataset_path: str, logs_dir: str, save_dir: str,
+                                  total_iterations: int = Config.TOTAL_TIMESTEPS,
+                                  steps_per_iteration: int = Config.GRPO_STEPS_PER_ITERATION,
+                                  mu_iterations: int = Config.GRPO_MU_ITERATIONS,
+                                  mode: str = 'new', constraints: Optional[Dict[str, str]] = None,
+                                  verbose: int = 1) -> Tuple[GRPOTrainer, GRPOEnv]:
+    """
+    Train or load a GRPO model for counterfactual generation.
+
+    Args:
+        dataset_path: Path to the dataset CSV file.
+        logs_dir: Directory for training logs.
+        save_dir: Directory to save the model checkpoints.
+        total_iterations: Number of outer iterations (I in Deepseek GRPO algorithm).
+        steps_per_iteration: Number of inner steps per iteration (M in algorithm).
+        mu_iterations: Number of GRPO inner iterations (μ in algorithm).
+        mode: Training mode ('new', 'load', or 'continue').
+        constraints: Dictionary of feature constraints.
+        verbose: Verbosity level for logging.
+
+    Returns:
+        Tuple of (GRPOTrainer, GRPOEnv).
+    """
+    logger = logging.getLogger(__name__)
+    valid_modes = ['new', 'load', 'continue']
+    if mode not in valid_modes:
+        raise ValueError(f"Invalid mode: {mode}. Must be one of {valid_modes}")
+
+    dataset_utils = DatasetUtils(dataset_path, verbose)
+    classifier = load_classifier_model(dataset_path, None, dataset_utils.num_features,
+                                      dataset_utils.num_classes, verbose)
+
+    env = GRPOEnv(dataset_path=dataset_path, model=classifier)
+    obs_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.n
+
+    policy = GRPOPolicy(obs_dim, action_dim)
+    policy_model_path = os.path.join(save_dir, f"grpo_policy_{os.path.splitext(os.path.basename(dataset_path))[0]}.pt")
+
+    if mode in ['load', 'continue'] and os.path.exists(policy_model_path):
+        logger.info(f"Loading existing GRPO policy from {policy_model_path}")
+        try:
+            policy.load_state_dict(torch.load(policy_model_path))
+            logger.info("Existing GRPO policy loaded successfully.")
+        except Exception as e:
+            logger.error(f"Error loading existing model: {e}")
+            if mode == 'load':
+                raise
+            logger.info("Falling back to training a new GRPO policy...")
+            mode = 'new'
+
+    trainer = GRPOTrainer(
+        env=env,
+        policy=policy,
+        learning_rate=Config.LEARNING_RATE_NEW,
+        group_size=Config.GRPO_GROUP_SIZE,
+        clip_range=Config.CLIP_RANGE,
+        kl_coef=Config.GRPO_KL_COEF,
+        mu_iterations=mu_iterations
+    )
+
+    if mode in ['new', 'continue']:
+        logger.info(f"Starting GRPO training for {total_iterations} iterations...")
+        for iteration in range(total_iterations):
+            trainer.update_reference_policy()
+            logger.info(f"\n=== Iteration {iteration+1}/{total_iterations} ===")
+            
+            for step in range(steps_per_iteration):
+                step_stats = trainer.train_step(num_episodes=5)
+                
+                if step % 1 == 0 and verbose > 0:
+                    logger.info(f"  Step {step+1}/{steps_per_iteration}: "
+                               f"Loss={step_stats['policy_loss']:.4f}, "
+                               f"Success={step_stats['success_rate']:.2%}, "
+                               f"Mean Reward={step_stats['mean_reward']:.2f}")
+
+            recent_stats = trainer.training_stats
+            if recent_stats['policy_loss']:
+                avg_loss = np.mean(recent_stats['policy_loss'][-steps_per_iteration:])
+                avg_success = np.mean(recent_stats['success_rate'][-steps_per_iteration:])
+                avg_reward = np.mean(recent_stats['mean_reward'][-steps_per_iteration:])
+                
+                logger.info(f"Iteration {iteration+1} Summary:")
+                logger.info(f"  Average Loss: {avg_loss:.4f}")
+                logger.info(f"  Average Success Rate: {avg_success:.2%}")
+                logger.info(f"  Average Reward: {avg_reward:.2f}")
+
+            if (iteration + 1) % 10 == 0:
+                checkpoint_path = os.path.join(save_dir, f"grpo_policy_iter_{iteration+1}.pt")
+                torch.save(policy.state_dict(), checkpoint_path)
+                logger.info(f"Checkpoint saved: {checkpoint_path}")
+
+        final_path = os.path.join(save_dir, f"grpo_policy_final.pt")
+        torch.save(policy.state_dict(), final_path)
+        logger.info(f"Final GRPO model saved: {final_path}")
+
+    return trainer, env
+
+def generate_counterfactuals_grpo(trainer: GRPOTrainer, env: GRPOEnv, dataset_path: str, 
+                                 save_path: Optional[str] = None, specific_indices: Optional[List[int]] = None,
+                                 max_steps_per_sample: int = Config.MAX_STEPS_PER_SAMPLE, 
+                                 verbose: int = 1) -> Tuple[List[Dict], pd.DataFrame, pd.DataFrame]:
+    logger = logging.getLogger(__name__)
+    logger.info("Generating counterfactuals using GRPO...")
+    
+    dataset_utils = DatasetUtils(dataset_path, verbose)
+    
+    indices_to_use = specific_indices or list(range(len(dataset_utils.dataset)))
+    logger.info(f"Processing {len(indices_to_use)} samples")
+    
+    counterfactuals, original_samples, counterfactual_samples = [], [], []
+    success_count, total_steps = 0, 0
+    start_time = time.time()
+    result_saver = ResultSaver(verbose)
+    
+    trainer.policy.eval()
+    
+    for i, idx in tqdm(enumerate(indices_to_use), total=len(indices_to_use), desc="Generating counterfactuals"):
+        env.current_instance_idx = idx
+        obs = env.reset()
+        
+        done, steps_taken = False, 0
+        while not done and steps_taken < max_steps_per_sample:
+            with torch.no_grad():
+                obs_tensor = torch.FloatTensor(obs).unsqueeze(0)
+                action, _ = trainer.policy.get_action_and_log_prob(obs_tensor, deterministic=True)
+                action = action.item()
+            
+            obs, reward, done, info = env.step(action)
+            steps_taken += 1
+        
+        original_features = env.original_features
+        original_prediction = env.original_prediction
+        success = info['counterfactual_found']
+        
+        counterfactuals.append({
+            'sample_id': i,
+            'data_index': idx,
+            'original_features': original_features,
+            'counterfactual_features': info['modified_features'] if success else None,
+            'original_prediction': original_prediction,
+            'counterfactual_prediction': info['modified_prediction'] if success else original_prediction,
+            'distance': info['distance'] if success else float('inf'),
+            'steps': steps_taken,
+            'success': success
+        })
+        original_samples.append(original_features)
+        counterfactual_samples.append(info['modified_features'] if success else original_features)
+        success_count += success
+        total_steps += steps_taken
+    
+    original_df = pd.DataFrame(original_samples, columns=dataset_utils.feature_columns)
+    counterfactual_df = pd.DataFrame(counterfactual_samples, columns=dataset_utils.feature_columns)
+    
+    if counterfactuals:
+        coverage, distance, implausibility, sparsity, actionability = get_metrics(
+            original_df, counterfactual_df, counterfactuals, env.constraints, 
+            dataset_utils.feature_columns, dataset_utils.dataset, verbose)
+        diversity = get_diversity(counterfactual_df)
+        logger.info(f"\nFinal GRPO statistics:")
+        logger.info(f"Coverage: {coverage:.2%} ({success_count}/{len(indices_to_use)})")
+        logger.info(f"Mean distance: {distance:.2f}")
+        logger.info(f"Mean sparsity: {sparsity}")
+        logger.info(f"Mean implausibility: {implausibility:.2f}")
+        logger.info(f"Mean actionability: {actionability:.2f}")
+        logger.info(f"Diversity: {diversity:.2f}")
+        logger.info(f"Average steps per successful counterfactual: {(total_steps / success_count if success_count > 0 else 0):.2f}")
+    
+    logger.info(f"Total time: {time.time() - start_time:.2f} seconds")
+    
+    if save_path and counterfactuals:
+        result_saver.save_counterfactuals_to_csv(counterfactuals, original_df, counterfactual_df, save_path)
+    
+    return counterfactuals, original_df, counterfactual_df
 def calculate_actionability(original_features: np.ndarray, counterfactual_features: np.ndarray, 
                            constraints: Dict[str, str], feature_columns: List[str]) -> int:
     """
@@ -801,59 +986,83 @@ def main():
     constraints = Config.CONSTRAINTS
     indices_to_use = Config.INDICES_TO_USE
     
-    logger.info("Processing PPO model...")
-    ppo_model, env = train_ppo_for_counterfactuals(
+    # logger.info("Processing PPO model...")
+    # ppo_model, env = train_ppo_for_counterfactuals(
+    #     dataset_path=dataset_path,
+    #     logs_dir=Config.LOGS_DIR,
+    #     save_dir=Config.SAVE_DIR,
+    #     total_timesteps=Config.TOTAL_TIMESTEPS,
+    #     mode=Config.TRAINING_MODE,
+    #     constraints=constraints,
+    #     verbose=1
+    # )
+    
+    # if ppo_model is not None:
+        # logger.info("Generating counterfactuals using standard PPO...")
+        # generate_counterfactuals(
+        #     ppo_model=ppo_model,
+        #     env=env,
+        #     dataset_path=dataset_path,
+        #     save_path=os.path.join(Config.DATA_DIR, 
+        #                           f"generated_counterfactuals_mcts_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
+        #     max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE-100,  # Reduced for MCTS
+        #     use_mcts=True,
+        #     mcts_simulations=Config.MCTS_SIMULATIONS,
+        #     specific_indices=indices_to_use,
+        #     verbose=1
+        # )
+
+        # generate_counterfactuals(
+        #     ppo_model=ppo_model,
+        #     env=env,
+        #     dataset_path=dataset_path,
+        #     save_path=os.path.join(Config.DATA_DIR, 
+        #                           f"generated_counterfactuals_ppo_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
+        #     max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
+        #     use_mcts=False,
+        #     mcts_simulations=Config.MCTS_SIMULATIONS,
+        #     specific_indices=indices_to_use,
+        #     verbose=1
+        # )
+
+        # logger.info("Generating multiple counterfactuals for a specific sample...")
+        # sample_index = 0  # Change this to the desired sample index
+        # _, _, counterfactual_df = generate_multiple_counterfactuals_for_sample(
+        #     ppo_model=ppo_model,
+        #     env=env,
+        #     dataset_path=dataset_path,
+        #     sample_index=sample_index,
+        #     num_counterfactuals=25,
+        #     save_path=os.path.join(Config.DATA_DIR, 
+        #                           f"generated_counterfactuals_sample_{sample_index}.csv"),
+        #     max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
+        #     use_mcts=False,
+        #     verbose=1
+        # )
+
+    logger.info("Processing GRPO model...")
+    grpo_trainer, grpo_env = train_grpo_for_counterfactuals(
         dataset_path=dataset_path,
         logs_dir=Config.LOGS_DIR,
         save_dir=Config.SAVE_DIR,
-        total_timesteps=Config.TOTAL_TIMESTEPS,
+        total_iterations=Config.GRPO_TOTAL_ITERATIONS,
+        steps_per_iteration=Config.GRPO_STEPS_PER_ITERATION,
+        mu_iterations=Config.GRPO_MU_ITERATIONS,
         mode=Config.TRAINING_MODE,
         constraints=constraints,
         verbose=1
     )
     
-    if ppo_model is not None:
-        logger.info("Generating counterfactuals using standard PPO...")
-        generate_counterfactuals(
-            ppo_model=ppo_model,
-            env=env,
-            dataset_path=dataset_path,
-            save_path=os.path.join(Config.DATA_DIR, 
-                                  f"generated_counterfactuals_mcts_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
-            max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE-100,  # Reduced for MCTS
-            use_mcts=True,
-            mcts_simulations=Config.MCTS_SIMULATIONS,
-            specific_indices=indices_to_use,
-            verbose=1
-        )
-
-        generate_counterfactuals(
-            ppo_model=ppo_model,
-            env=env,
-            dataset_path=dataset_path,
-            save_path=os.path.join(Config.DATA_DIR, 
-                                  f"generated_counterfactuals_ppo_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
-            max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
-            use_mcts=False,
-            mcts_simulations=Config.MCTS_SIMULATIONS,
-            specific_indices=indices_to_use,
-            verbose=1
-        )
-
-        logger.info("Generating multiple counterfactuals for a specific sample...")
-        sample_index = 0  # Change this to the desired sample index
-        _, _, counterfactual_df = generate_multiple_counterfactuals_for_sample(
-            ppo_model=ppo_model,
-            env=env,
-            dataset_path=dataset_path,
-            sample_index=sample_index,
-            num_counterfactuals=25,
-            save_path=os.path.join(Config.DATA_DIR, 
-                                  f"generated_counterfactuals_sample_{sample_index}.csv"),
-            max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
-            use_mcts=False,
-            verbose=1
-        )
+    logger.info("Generating counterfactuals using GRPO...")
+    generate_counterfactuals_grpo(
+        trainer=grpo_trainer,
+        env=grpo_env,
+        dataset_path=dataset_path,
+        save_path=os.path.join(Config.DATA_DIR, 
+                                f"generated_counterfactuals_grpo_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
+        specific_indices=indices_to_use,
+        verbose=1
+    )
 
 if __name__ == "__main__":
     main()

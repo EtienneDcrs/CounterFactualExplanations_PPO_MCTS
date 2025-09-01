@@ -1,0 +1,6 @@
+age,workclass,fnlwgt,education,education-num,marital-status,occupation,relationship,race,sex,capital-gain,capital-loss,hours-per-week,native-country
+43, State-gov,77516, Bachelors,15, Married-spouse-absent, Adm-clerical, Not-in-family, White, Male,2174,0,40, Italy
+61, Self-emp-not-inc,83311, Bachelors,16, Married-civ-spouse, Exec-managerial, Husband, White, Male,0,0,9, United-States
+44, Private,215646, HS-grad,16, Divorced, Handlers-cleaners, Not-in-family, White, Male,0,0,40, United-States
+62, Private,234721, 11th,8, Married-civ-spouse, Handlers-cleaners, Husband, Black, Male,0,0,46, United-States
+28, Private,420997, Bachelors,16, Married-civ-spouse, Prof-specialty, Wife, Other, Female,0,0,40, Cuba

@@ -1,0 +1,101 @@
+age,workclass,fnlwgt,education,education-num,marital-status,occupation,relationship,race,sex,capital-gain,capital-loss,hours-per-week,native-country,sample_id,counterfactual_found
+28, Private,124905, 7th-8th,4, Married-civ-spouse, Craft-repair, Husband, White, Male,0,0,30, United-States,0,0
+42,,51795, HS-grad,9, Divorced,, Unmarried, Black, Female,0,0,32, United-States,1,0
+50, Private,73493, Some-college,10, Divorced, Other-service, Not-in-family, White, Female,0,0,40, United-States,2,0
+47, Private,95680, Some-college,10, Married-civ-spouse, Exec-managerial, Husband, Asian-Pac-Islander, Male,0,0,40, United-States,3,0
+45, Federal-gov,283037, Bachelors,13, Married-civ-spouse, Exec-managerial, Husband, White, Male,0,0,40, United-States,4,0
+28, Private,480861, HS-grad,9, Married-civ-spouse, Machine-op-inspct, Husband, White, Male,0,0,45, United-States,5,0
+22, Private,198148, Some-college,10, Never-married, Adm-clerical, Own-child, White, Male,0,0,50, United-States,6,0
+52, Private,146378, HS-grad,9, Married-civ-spouse, Craft-repair, Husband, White, Male,0,0,40, United-States,7,0
+42, Private,154374, Bachelors,13, Married-civ-spouse, Transport-moving, Husband, White, Male,0,0,58, United-States,8,0
+36, Private,112497, Bachelors,13, Married-civ-spouse, Tech-support, Husband, White, Male,0,0,40, United-States,9,0
+33, Private,326104, Some-college,10, Married-civ-spouse, Exec-managerial, Husband, White, Male,0,0,50, United-States,10,0
+33, Private,26973, Assoc-voc,11, Married-civ-spouse, Tech-support, Wife, White, Female,0,0,40, United-States,11,0
+54, Private,143865, HS-grad,9, Divorced, Sales, Unmarried, White, Female,0,0,35, United-States,12,0
+18,,437851, Some-college,10, Never-married,, Own-child, White, Male,0,0,40, United-States,13,0
+17, Private,175024, 11th,7, Never-married, Handlers-cleaners, Own-child, White, Male,2176,0,18, United-States,14,0
+60, Private,162947, 5th-6th,3, Divorced, Machine-op-inspct, Not-in-family, White, Female,0,0,40, Puerto-Rico,15,0
+47, Private,85129, HS-grad,9, Divorced, Other-service, Not-in-family, Asian-Pac-Islander, Female,0,0,40, United-States,16,0
+56, Private,117881, 11th,7, Divorced, Machine-op-inspct, Not-in-family, White, Female,0,0,40, United-States,17,0
+59, Self-emp-inc,125000, Bachelors,13, Married-civ-spouse, Exec-managerial, Husband, White, Male,0,0,40, England,18,0
+51, Local-gov,241843, Preschool,1, Married-civ-spouse, Other-service, Husband, White, Male,0,0,40, United-States,19,0
+50, Local-gov,177705, Some-college,10, Married-civ-spouse, Adm-clerical, Husband, White, Male,0,1740,48, United-States,20,0
+59, Private,283005, 11th,7, Divorced, Adm-clerical, Unmarried, White, Female,0,0,40, United-States,21,0
+75, Self-emp-not-inc,30599, Masters,14, Married-spouse-absent, Prof-specialty, Not-in-family, White, Female,0,0,50, United-States,22,0
+19, Private,196857, HS-grad,9, Never-married, Other-service, Not-in-family, White, Female,0,0,40, United-States,23,0
+34, Local-gov,166545, HS-grad,9, Never-married, Adm-clerical, Own-child, White, Female,0,0,40, United-States,24,0
+37, Private,325538, HS-grad,9, Never-married, Exec-managerial, Own-child, White, Male,0,0,60,,25,0
+31, Private,83446, HS-grad,9, Widowed, Craft-repair, Unmarried, White, Female,0,0,40, United-States,26,0
+40, Private,228535, Assoc-acdm,12, Married-civ-spouse, Prof-specialty, Husband, White, Male,7298,0,36, United-States,27,0
+28, Private,92262, HS-grad,9, Married-civ-spouse, Craft-repair, Husband, White, Male,0,0,40, United-States,28,0
+28, State-gov,149624, Bachelors,13, Married-civ-spouse, Prof-specialty, Husband, White, Male,0,0,40, United-States,29,0
+23, Private,120172, Bachelors,13, Never-married, Exec-managerial, Not-in-family, White, Male,0,0,40, United-States,30,0
+51, Private,128143, Some-college,10, Married-civ-spouse, Craft-repair, Husband, White, Male,0,0,40, United-States,31,0
+44, Private,81853, HS-grad,9, Never-married, Sales, Not-in-family, Asian-Pac-Islander, Female,0,0,40, United-States,32,0
+26, Private,153434, HS-grad,9, Never-married, Other-service, Own-child, White, Male,0,0,24, United-States,33,0
+38, Private,498785, HS-grad,9, Married-civ-spouse, Handlers-cleaners, Husband, White, Male,0,0,40, United-States,34,0
+28, Private,236861, Bachelors,13, Divorced, Craft-repair, Unmarried, White, Male,0,0,50, United-States,35,0
+50, Private,139464, Bachelors,13, Divorced, Prof-specialty, Unmarried, White, Female,0,0,36, Ireland,36,0
+51, Local-gov,116286, Masters,14, Married-civ-spouse, Prof-specialty, Husband, White, Male,0,0,60, United-States,37,0
+22, Private,281432, Some-college,10, Never-married, Handlers-cleaners, Own-child, White, Male,0,0,30, United-States,38,0
+64, Self-emp-not-inc,150121, Doctorate,16, Married-civ-spouse, Exec-managerial, Husband, White, Male,0,0,25, United-States,39,0
+50, Private,193884, 7th-8th,4, Married-civ-spouse, Craft-repair, Husband, White, Male,0,0,40, Ecuador,40,0
+22, Federal-gov,218445, Some-college,10, Never-married, Exec-managerial, Not-in-family, White, Female,0,0,40, United-States,41,0
+43, Private,307767, HS-grad,9, Married-civ-spouse, Handlers-cleaners, Husband, White, Male,0,0,40, United-States,42,0
+48, Self-emp-not-inc,243631, Some-college,10, Married-civ-spouse, Craft-repair, Husband, Amer-Indian-Eskimo, Male,7688,0,40, United-States,43,0
+43, Local-gov,160574, Bachelors,13, Married-civ-spouse, Craft-repair, Husband, White, Male,0,0,40, United-States,44,0
+19, Private,383637, HS-grad,9, Never-married, Other-service, Own-child, White, Male,0,0,20, United-States,45,0
+26, Private,314177, HS-grad,9, Never-married, Sales, Not-in-family, Black, Male,0,0,40, United-States,46,0
+24, Local-gov,33432, Assoc-acdm,12, Married-civ-spouse, Other-service, Wife, White, Female,0,0,40, United-States,47,0
+65, Self-emp-inc,139272, Bachelors,13, Married-civ-spouse, Sales, Husband, White, Male,11496,0,60, United-States,48,1
+45, Self-emp-not-inc,204205, 10th,6, Married-civ-spouse, Craft-repair, Husband, White, Male,0,0,65, United-States,49,0
+34, Private,173806, Masters,14, Never-married, Prof-specialty, Not-in-family, White, Male,4865,0,60, United-States,50,0
+54, Private,174319, HS-grad,9, Divorced, Transport-moving, Not-in-family, White, Male,0,0,40, United-States,51,0
+18, Private,231193, 12th,8, Never-married, Machine-op-inspct, Own-child, White, Male,0,0,30, United-States,52,0
+34, Private,114691, Some-college,10, Married-civ-spouse, Exec-managerial, Husband, White, Male,0,0,50, United-States,53,0
+47, State-gov,30575, Some-college,10, Married-civ-spouse, Prof-specialty, Husband, White, Male,0,0,50, United-States,54,0
+27, Private,201872, Some-college,10, Married-civ-spouse, Sales, Husband, White, Male,0,0,50, United-States,55,0
+24, Private,215251, Bachelors,13, Never-married, Exec-managerial, Not-in-family, White, Female,0,0,50, United-States,56,0
+17, Private,295488, 11th,7, Never-married, Other-service, Own-child, Black, Female,0,0,25, United-States,57,0
+37, Private,86551, Bachelors,13, Married-civ-spouse, Exec-managerial, Husband, White, Male,0,0,45, United-States,58,0
+31, Private,186787, HS-grad,9, Never-married, Craft-repair, Own-child, White, Male,0,0,42, United-States,59,0
+27, Private,115831, Some-college,10, Married-civ-spouse, Other-service, Husband, White, Male,0,0,40, United-States,60,0
+23, Private,119838, Bachelors,13, Never-married, Prof-specialty, Own-child, White, Male,0,0,50, United-States,61,0
+20,,376474, Some-college,10, Never-married,, Own-child, White, Male,0,0,32, United-States,62,0
+26, Private,397317, Masters,14, Never-married, Prof-specialty, Not-in-family, White, Female,0,1876,40, United-States,63,0
+31, Private,171871, Masters,14, Never-married, Prof-specialty, Not-in-family, White, Female,0,0,46, United-States,64,0
+27, Private,125298, Some-college,10, Never-married, Adm-clerical, Unmarried, White, Female,0,0,50, United-States,65,0
+34,,197688, HS-grad,9, Never-married,, Not-in-family, Black, Female,0,0,40, United-States,66,0
+55, Private,92215, HS-grad,9, Divorced, Adm-clerical, Not-in-family, White, Female,0,0,40, United-States,67,0
+63, Self-emp-not-inc,194638, HS-grad,9, Married-civ-spouse, Craft-repair, Husband, White, Male,0,0,32, United-States,68,0
+74, Self-emp-not-inc,92298, Bachelors,13, Married-civ-spouse, Exec-managerial, Husband, White, Male,0,0,10, United-States,69,0
+32, Local-gov,286101, HS-grad,9, Never-married, Transport-moving, Unmarried, Black, Female,0,0,37, United-States,70,0
+31, Private,203488, Bachelors,13, Married-civ-spouse, Adm-clerical, Husband, White, Male,7298,0,50, United-States,71,0
+24, Private,180060, Masters,14, Never-married, Exec-managerial, Own-child, White, Male,6849,0,90, United-States,72,0
+34, Private,114691, Some-college,10, Married-civ-spouse, Exec-managerial, Husband, White, Male,0,0,50, United-States,73,0
+57, Private,69884, HS-grad,9, Married-civ-spouse, Sales, Husband, White, Male,0,0,40, United-States,74,0
+45, Private,46406, Masters,14, Married-civ-spouse, Prof-specialty, Husband, White, Male,0,0,36, England,75,0
+20, Private,170800, Some-college,10, Never-married, Farming-fishing, Own-child, White, Female,0,0,40, United-States,76,0
+35, State-gov,140752, HS-grad,9, Married-civ-spouse, Craft-repair, Husband, White, Male,0,0,40, United-States,77,0
+32, Private,209432, HS-grad,9, Never-married, Handlers-cleaners, Own-child, White, Female,0,0,40, United-States,78,0
+39, Private,324420, 1st-4th,2, Married-civ-spouse, Craft-repair, Husband, White, Male,0,0,45, Mexico,79,0
+59, Private,146013, Some-college,10, Married-civ-spouse, Sales, Husband, White, Male,4064,0,40, United-States,80,0
+33, Private,231043, HS-grad,9, Married-civ-spouse, Craft-repair, Husband, White, Male,0,0,50, United-States,81,0
+61,,188172, Doctorate,16, Widowed,, Not-in-family, White, Female,0,0,5, United-States,82,0
+45, Federal-gov,170915, HS-grad,9, Divorced, Tech-support, Not-in-family, White, Female,4865,0,40, United-States,83,0
+44, Private,286750, Some-college,10, Married-civ-spouse, Transport-moving, Husband, Black, Male,0,0,40, United-States,84,0
+26, Federal-gov,393728, Some-college,10, Divorced, Adm-clerical, Own-child, White, Male,0,0,24, United-States,85,0
+32, Private,375833, 11th,7, Never-married, Craft-repair, Other-relative, White, Male,0,0,40, United-States,86,0
+44, Private,198316, Bachelors,13, Married-civ-spouse, Exec-managerial, Husband, White, Male,15024,0,50, United-States,87,0
+18, Local-gov,36411, 12th,8, Never-married, Prof-specialty, Own-child, White, Male,0,0,30, United-States,88,0
+25, Private,201413, Some-college,10, Never-married, Other-service, Unmarried, Black, Female,0,0,40, United-States,89,0
+35, Private,181382, HS-grad,9, Married-civ-spouse, Craft-repair, Husband, White, Male,0,0,43, United-States,90,0
+20, Private,323573, HS-grad,9, Never-married, Other-service, Own-child, White, Female,0,0,20, United-States,91,0
+45, Private,214627, Doctorate,16, Widowed, Prof-specialty, Unmarried, White, Male,15020,0,40, Iran,92,0
+32,,282622, HS-grad,9, Divorced,, Unmarried, White, Female,0,0,28, United-States,93,0
+55,,105138, HS-grad,9, Married-civ-spouse,, Wife, Asian-Pac-Islander, Female,0,0,40, United-States,94,0
+37, Local-gov,186035, Some-college,10, Married-civ-spouse, Tech-support, Husband, White, Male,0,0,45, United-States,95,0
+48, Private,199739, HS-grad,9, Divorced, Craft-repair, Unmarried, White, Female,0,0,40, United-States,96,0
+74, Self-emp-inc,162340, Some-college,10, Widowed, Exec-managerial, Unmarried, White, Male,0,0,40, United-States,97,0
+43, Private,149670, Some-college,10, Married-civ-spouse, Adm-clerical, Wife, White, Female,4064,0,15, United-States,98,0
+22, Federal-gov,218445, Some-college,10, Never-married, Exec-managerial, Not-in-family, White, Female,0,0,40, United-States,99,0

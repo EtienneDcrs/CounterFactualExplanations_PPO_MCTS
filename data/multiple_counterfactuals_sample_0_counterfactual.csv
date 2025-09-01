@@ -1,0 +1,26 @@
+age,workclass,education,marital-status,occupation,race,sex,hours-per-week
+50, Local-gov, 12th, Married-civ-spouse, Adm-clerical, Black, Male,99
+46, Self-emp-not-inc, Bachelors, Married-civ-spouse, Adm-clerical, Asian-Pac-Islander, Male,36
+39, Without-pay, 1st-4th, Married-civ-spouse, Adm-clerical, Asian-Pac-Islander, Male,39
+39, Without-pay, 12th, Married-civ-spouse, Adm-clerical, Asian-Pac-Islander, Male,44
+42, State-gov, Bachelors, Married-civ-spouse, Adm-clerical, White, Male,57
+49, Local-gov, Bachelors, Married-civ-spouse, Adm-clerical, White, Male,40
+90, Self-emp-inc, Doctorate, Married-civ-spouse, Prof-specialty, Other, Male,70
+47, Self-emp-inc, Preschool, Married-spouse-absent, Adm-clerical, Asian-Pac-Islander, Male,48
+56, Without-pay, Some-college, Never-married, Tech-support, Amer-Indian-Eskimo, Male,61
+39, Self-emp-not-inc, Assoc-voc, Married-AF-spouse, Adm-clerical, Other, Male,47
+39, State-gov, 1st-4th, Married-AF-spouse, Adm-clerical, White, Male,39
+61, State-gov, Bachelors, Married-spouse-absent, Prof-specialty, Asian-Pac-Islander, Male,68
+39, Self-emp-inc, 7th-8th, Married-AF-spouse, Adm-clerical, Black, Male,45
+39, State-gov, Bachelors, Married-civ-spouse, Adm-clerical, Other, Male,50
+43, State-gov, Doctorate, Married-civ-spouse, Exec-managerial, Other, Male,58
+71, Without-pay, Bachelors, Married-AF-spouse, Adm-clerical, Asian-Pac-Islander, Male,50
+51, State-gov, Bachelors, Married-AF-spouse, Handlers-cleaners, White, Male,48
+66, Federal-gov, Preschool, Married-AF-spouse, Farming-fishing, Amer-Indian-Eskimo, Male,52
+46, State-gov, Bachelors, Married-AF-spouse, Adm-clerical, White, Male,46
+57, Local-gov, Bachelors, Married-civ-spouse, Adm-clerical, Black, Male,45
+56, Federal-gov, Assoc-voc, Married-spouse-absent, Other-service, Black, Male,50
+49, Self-emp-not-inc, Assoc-acdm, Married-AF-spouse, Adm-clerical, Amer-Indian-Eskimo, Male,68
+39, State-gov, Bachelors, Married-AF-spouse, Adm-clerical, Black, Male,45
+52, State-gov, Bachelors, Married-spouse-absent, Adm-clerical, Amer-Indian-Eskimo, Male,58
+40, State-gov, Bachelors, Married-civ-spouse, Armed-Forces, White, Male,59

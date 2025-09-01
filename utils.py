@@ -254,8 +254,8 @@ if __name__ == "__main__":
     # Example usage
     dataset = "bank"
     
-    original_csv = f"data/generated_counterfactuals_ppo_{dataset}_original.csv"
-    counterfactual_csv = f"data/generated_counterfactuals_ppo_{dataset}.csv"
+    original_csv = f"data/generated_counterfactuals_grpo_{dataset}_original.csv"
+    counterfactual_csv = f"data/generated_counterfactuals_grpo_{dataset}.csv"
     constraints = {}
     coverage, distance, implausibility, sparsity, actionability, diversity = get_metrics(original_csv, counterfactual_csv, constraints)
     print(f"Coverage: {coverage:.2%}, Distance: {distance:.2f}, Implausibility: {implausibility:.2f}, "

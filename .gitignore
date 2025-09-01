@@ -4,4 +4,3 @@ ppo_models
 __pycache__
 *.pth
 .vscode
-data

@@ -1,0 +1,39 @@
+age,workclass,fnlwgt,education,education-num,marital-status,occupation,relationship,race,sex,capital-gain,capital-loss,hours-per-week,native-country
+40, Private,179536, Bachelors,13, Divorced, Exec-managerial, Not-in-family, White, Female,10520,0,40, United-States
+55, Private,255124, Masters,14, Married-civ-spouse, Prof-specialty, Husband, White, Male,15024,0,50,
+38, Private,73260, Assoc-voc,11, Married-civ-spouse, Craft-repair, Husband, White, Male,4386,0,40, United-States
+46, Private,241428, Prof-school,15, Married-civ-spouse, Prof-specialty, Husband, White, Male,15024,0,45, United-States
+41, Private,124910, Some-college,10, Married-civ-spouse, Craft-repair, Husband, Amer-Indian-Eskimo, Male,7298,0,50, United-States
+51, Self-emp-inc,252412, Masters,14, Married-civ-spouse, Exec-managerial, Husband, White, Male,15024,0,50, United-States
+31, Private,242073, Bachelors,13, Never-married, Exec-managerial, Not-in-family, White, Female,14344,0,50, United-States
+61, Self-emp-not-inc,351295, HS-grad,9, Married-civ-spouse, Farming-fishing, Wife, White, Female,22040,0,40, United-States
+47, Private,243617, HS-grad,9, Married-civ-spouse, Machine-op-inspct, Wife, Black, Female,15024,0,40, United-States
+54, Private,246421, Some-college,10, Married-civ-spouse, Transport-moving, Husband, White, Male,15024,0,60, United-States
+50, Private,118249, Bachelors,13, Married-civ-spouse, Transport-moving, Husband, White, Male,7298,0,40, United-States
+56, Self-emp-inc,127754, Some-college,10, Married-civ-spouse, Exec-managerial, Husband, White, Male,7688,0,50, United-States
+63, Self-emp-not-inc,326412, Some-college,10, Married-civ-spouse, Prof-specialty, Wife, White, Female,20051,0,10, United-States
+52, Private,261972, Bachelors,13, Married-civ-spouse, Sales, Wife, White, Female,15024,0,60, United-States
+39, Private,255296, HS-grad,9, Married-civ-spouse, Sales, Husband, White, Male,15024,0,50, United-States
+44, Private,239921, Masters,14, Married-civ-spouse, Exec-managerial, Husband, White, Male,15024,0,40, United-States
+58, Self-emp-inc,254781, HS-grad,9, Married-civ-spouse, Sales, Wife, White, Female,15024,0,35, United-States
+38, Private,259745, Bachelors,13, Married-civ-spouse, Sales, Husband, White, Male,15024,0,60, United-States
+31, Private,231396, Masters,14, Never-married, Prof-specialty, Not-in-family, White, Female,14084,0,50, United-States
+33, Private,257238, Bachelors,13, Married-civ-spouse, Exec-managerial, Husband, White, Male,15024,0,60, United-States
+37, Private,124738, Some-college,10, Married-civ-spouse, Adm-clerical, Wife, White, Female,7298,0,45, United-States
+34, State-gov,130572, Bachelors,13, Married-civ-spouse, Exec-managerial, Husband, White, Male,7688,0,45,
+44, Private,239921, Bachelors,13, Married-civ-spouse, Exec-managerial, Husband, White, Male,15024,0,60, United-States
+53, State-gov,129810, Doctorate,16, Married-civ-spouse, Prof-specialty, Husband, White, Male,7688,0,50, United-States
+36, Private,51675, HS-grad,9, Married-civ-spouse, Craft-repair, Husband, White, Male,3103,0,40, United-States
+17,,594112, 10th,6, Never-married,, Own-child, White, Female,34095,0,32, United-States
+50, Self-emp-not-inc,246686, HS-grad,9, Married-civ-spouse, Sales, Husband, White, Male,15024,0,55, El-Salvador
+39, Self-emp-inc,263110, Assoc-acdm,12, Married-civ-spouse, Exec-managerial, Husband, White, Male,15024,0,55, United-States
+31, Private,37613, Assoc-acdm,12, Never-married, Adm-clerical, Not-in-family, White, Male,2202,0,38, United-States
+38, Federal-gov,126976, Assoc-acdm,12, Married-civ-spouse, Adm-clerical, Wife, White, Female,7688,0,33, United-States
+43, Private,248620, Some-college,10, Married-civ-spouse, Craft-repair, Husband, White, Male,15024,0,60, United-States
+53, State-gov,252652, HS-grad,9, Married-civ-spouse, Adm-clerical, Husband, White, Male,15024,0,35, United-States
+64, Self-emp-not-inc,262998, Bachelors,13, Married-civ-spouse, Exec-managerial, Husband, White, Male,15024,0,35, United-States
+50, Self-emp-not-inc,40799, Masters,14, Married-civ-spouse, Farming-fishing, Husband, White, Male,2407,0,98, United-States
+46, Private,462392, Masters,14, Divorced, Exec-managerial, Not-in-family, White, Female,27828,0,50, United-States
+51, Private,175901, Bachelors,13, Divorced, Exec-managerial, Not-in-family, Black, Male,10520,0,40, United-States
+75,,422193, Bachelors,13, Widowed,, Not-in-family, White, Female,25124,0,16, United-States
+59, Self-emp-not-inc,254836, Bachelors,13, Married-civ-spouse, Sales, Husband, White, Male,15024,0,40, United-States

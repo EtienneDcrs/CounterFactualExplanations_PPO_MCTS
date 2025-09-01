@@ -68,7 +68,9 @@ def validate_dataset(dataset: pd.DataFrame) -> None:
     if non_numeric_columns:
         logger.warning(f"Non-numeric columns detected: {non_numeric_columns}")
 
-def train_ppo_model_tool(dataset_path: str,model_path:Optional[str] = None, output_ppo_model_path:Optional[str]=None, total_timesteps: int = 400000, training_mode: str = 'new') -> dict:
+def train_ppo_model_tool(dataset_path: str,model_path:Optional[str] = None,
+                         #output_ppo_model_path:Optional[str]=None,
+                        total_timesteps: int = 400000, training_mode: str = 'new') -> dict:
     """
     Train a PPO model for counterfactual generation using train_ppo_for_counterfactuals from PPO_train.py.
 
@@ -81,13 +83,14 @@ def train_ppo_model_tool(dataset_path: str,model_path:Optional[str] = None, outp
     Returns:
         dict: Training result with status, model path, and message.
     """
-    logger.info(f"Starting PPO training: dataset={dataset_path},\nmodel_path={model_path}, \noutput_ppo_model_path={output_ppo_model_path},\ntimesteps={total_timesteps}, \nmode={training_mode}")
+    logger.info(f"Starting PPO training: dataset={dataset_path},\nmodel_path={model_path},\ntimesteps={total_timesteps}, \nmode={training_mode}")
     if type(total_timesteps) is not int or total_timesteps <= 0:
         logger.error("Invalid total_timesteps: must be a positive integer, using default 400000")
         total_timesteps = 400000  # Default value if invalid
         
     try:
-        model,env = train_ppo_for_counterfactuals(dataset_path, model_path, output_ppo_model_path,
+        model,env = train_ppo_for_counterfactuals(dataset_path, model_path, 
+                                                  #output_ppo_model_path,
                                   logs_dir=Config.LOGS_DIR, save_dir= Config.SAVE_DIR,
                                   total_timesteps= total_timesteps, 
                                   mode = training_mode, 

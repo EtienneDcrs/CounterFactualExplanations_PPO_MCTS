@@ -1,0 +1,74 @@
+CERTIFAI
+
+Coverage rate: 100% (768/768)
+Mean distance of counterfactuals: 99.95827799479166  
+Proximity KPI : 0.7507
+Sparsity KPI : 7.7812
+
+PPO
+
+Coverage rate: 30.6% (235/768)
+Mean distance of counterfactuals: 18.7471
+Proximity KPI: 0.0488
+Sparsity KPI: 0.9362
+
+PPO (SB3)
+
+Coverage rate: 92.45% (710/768)
+Mean distance of counterfactuals: 40.85
+Proximity KPI: 0.2618
+Sparsity KPI: 1.1873
+
+400'000 steps
+
+Coverage rate: 91.41% (702/768)
+Mean distance of counterfactuals: 49.38
+Proximity KPI: 0.2903
+Sparsity KPI: 1.1538
+
+1'000'000 steps
+
+Coverage rate: 91.93% (706/768)
+Mean distance of counterfactuals: 45.50
+Proximity KPI: 0.2823
+Sparsity KPI: 1.2139
+
+PPO + MCTS
+
+Final statistics:
+Coverage rate: 98.70% (758/768)
+Mean distance of counterfactuals: 38.17
+Average steps per successful counterfactual: 3.25
+Total time: 2515.99 seconds
+Proximity KPI: 0.2356
+Sparsity KPI: 1.5554
+
+PPO without MCTS
+
+Final statistics:
+Coverage rate: 92.45% (710/768)
+Mean distance of counterfactuals: 38.64
+Average steps per successful counterfactual: 2.70
+Total time: 15.13 seconds
+Proximity KPI: 0.2446
+Sparsity KPI: 1.2535
+
+A2C without MCTS
+
+Final statistics:
+Coverage rate: 84.00% (84/100)
+Mean distance of counterfactuals: 49.21
+Average steps per successful counterfactual: 4.21
+Total time: 4.26 seconds
+Proximity KPI: 0.3357
+Sparsity KPI: 1.2262
+
+A2C + MCTS
+
+Final statistics:
+Coverage rate: 78.00% (78/100)
+Mean distance of counterfactuals: 44.67
+Average steps per successful counterfactual: 13.04
+Total time: 1323.89 seconds
+Proximity KPI: 0.2954
+Sparsity KPI: 3.0256

@@ -121,9 +121,7 @@ if query:
 with st.sidebar:
     st.header("Counterfactual PPO Tools")
     st.markdown("Use the chat input to interact with the following tools:")
-    st.markdown("- **Train PPO Model**: Train a PPO model (e.g., 'Train PPO model on data/my_dataset.csv with 400000 timesteps').")
+    st.markdown("- **Train PPO Model**: Train a PPO model (e.g., 'Train PPO model on data/my_dataset.csv with 40000 timesteps').")
     st.markdown("- **Generate Counterfactuals**: Generate counterfactuals (e.g., 'Generate counterfactuals for data/my_dataset.csv with model ppo_models/ppo_counterfactual_final.zip').")
     st.markdown("- **Calculate Metrics**: Calculate KPIs (e.g., 'Calculate metrics for data/original.csv and data/generated_counterfactuals.csv').")
-    if "resources" in st.session_state:
-        with st.expander("Guidelines and Model Info"):
-            st.json(st.session_state["resources"])
+    

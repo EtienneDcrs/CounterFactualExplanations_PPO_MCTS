@@ -1,0 +1,9 @@
+,change_count,change_percentage,avg_magnitude
+Glucose,439,62.18130311614731,51.77904328018223
+BloodPressure,385,54.53257790368272,28.457142857142856
+Age,33,4.674220963172805,21.515151515151516
+Pregnancies,0,0.0,0.0
+SkinThickness,0,0.0,0.0
+Insulin,0,0.0,0.0
+BMI,0,0.0,0.0
+DiabetesPedigreeFunction,0,0.0,0.0

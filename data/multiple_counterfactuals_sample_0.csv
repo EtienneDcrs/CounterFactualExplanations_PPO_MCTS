@@ -1,0 +1,26 @@
+sample_id,counterfactual_id,data_index,original_prediction,counterfactual_prediction,distance,steps,original_age,counterfactual_age,original_workclass,counterfactual_workclass,original_education,counterfactual_education,original_marital-status,counterfactual_marital-status,original_occupation,counterfactual_occupation,original_race,counterfactual_race,original_sex,counterfactual_sex,original_hours-per-week,counterfactual_hours-per-week
+0,0,0,0,1,74.0,17,39,50, State-gov, Local-gov, Bachelors, 12th, Never-married, Married-civ-spouse, Adm-clerical, Adm-clerical, White, Black, Male, Male,40,99
+0,1,0,0,1,14.0,6,39,46, State-gov, Self-emp-not-inc, Bachelors, Bachelors, Never-married, Married-civ-spouse, Adm-clerical, Adm-clerical, White, Asian-Pac-Islander, Male, Male,40,36
+0,2,0,0,1,5.0,12,39,39, State-gov, Without-pay, Bachelors, 1st-4th, Never-married, Married-civ-spouse, Adm-clerical, Adm-clerical, White, Asian-Pac-Islander, Male, Male,40,39
+0,3,0,0,1,8.0,107,39,39, State-gov, Without-pay, Bachelors, 12th, Never-married, Married-civ-spouse, Adm-clerical, Adm-clerical, White, Asian-Pac-Islander, Male, Male,40,44
+0,4,0,0,1,21.0,8,39,42, State-gov, State-gov, Bachelors, Bachelors, Never-married, Married-civ-spouse, Adm-clerical, Adm-clerical, White, White, Male, Male,40,57
+0,5,0,0,1,12.0,4,39,49, State-gov, Local-gov, Bachelors, Bachelors, Never-married, Married-civ-spouse, Adm-clerical, Adm-clerical, White, White, Male, Male,40,40
+0,6,0,0,1,86.0,39,39,90, State-gov, Self-emp-inc, Bachelors, Doctorate, Never-married, Married-civ-spouse, Adm-clerical, Prof-specialty, White, Other, Male, Male,40,70
+0,7,0,0,1,20.0,10,39,47, State-gov, Self-emp-inc, Bachelors, Preschool, Never-married, Married-spouse-absent, Adm-clerical, Adm-clerical, White, Asian-Pac-Islander, Male, Male,40,48
+0,8,0,0,1,42.0,14,39,56, State-gov, Without-pay, Bachelors, Some-college, Never-married, Never-married, Adm-clerical, Tech-support, White, Amer-Indian-Eskimo, Male, Male,40,61
+0,9,0,0,1,11.0,6,39,39, State-gov, Self-emp-not-inc, Bachelors, Assoc-voc, Never-married, Married-AF-spouse, Adm-clerical, Adm-clerical, White, Other, Male, Male,40,47
+0,10,0,0,1,3.0,4,39,39, State-gov, State-gov, Bachelors, 1st-4th, Never-married, Married-AF-spouse, Adm-clerical, Adm-clerical, White, White, Male, Male,40,39
+0,11,0,0,1,53.0,11,39,61, State-gov, State-gov, Bachelors, Bachelors, Never-married, Married-spouse-absent, Adm-clerical, Prof-specialty, White, Asian-Pac-Islander, Male, Male,40,68
+0,12,0,0,1,9.0,7,39,39, State-gov, Self-emp-inc, Bachelors, 7th-8th, Never-married, Married-AF-spouse, Adm-clerical, Adm-clerical, White, Black, Male, Male,40,45
+0,13,0,0,1,12.0,7,39,39, State-gov, State-gov, Bachelors, Bachelors, Never-married, Married-civ-spouse, Adm-clerical, Adm-clerical, White, Other, Male, Male,40,50
+0,14,0,0,1,26.0,18,39,43, State-gov, State-gov, Bachelors, Doctorate, Never-married, Married-civ-spouse, Adm-clerical, Exec-managerial, White, Other, Male, Male,40,58
+0,15,0,0,1,45.0,11,39,71, State-gov, Without-pay, Bachelors, Bachelors, Never-married, Married-AF-spouse, Adm-clerical, Adm-clerical, White, Asian-Pac-Islander, Male, Male,40,50
+0,16,0,0,1,22.0,6,39,51, State-gov, State-gov, Bachelors, Bachelors, Never-married, Married-AF-spouse, Adm-clerical, Handlers-cleaners, White, White, Male, Male,40,48
+0,17,0,0,1,44.0,21,39,66, State-gov, Federal-gov, Bachelors, Preschool, Never-married, Married-AF-spouse, Adm-clerical, Farming-fishing, White, Amer-Indian-Eskimo, Male, Male,40,52
+0,18,0,0,1,14.0,3,39,46, State-gov, State-gov, Bachelors, Bachelors, Never-married, Married-AF-spouse, Adm-clerical, Adm-clerical, White, White, Male, Male,40,46
+0,19,0,0,1,26.0,13,39,57, State-gov, Local-gov, Bachelors, Bachelors, Never-married, Married-civ-spouse, Adm-clerical, Adm-clerical, White, Black, Male, Male,40,45
+0,20,0,0,1,32.0,13,39,56, State-gov, Federal-gov, Bachelors, Assoc-voc, Never-married, Married-spouse-absent, Adm-clerical, Other-service, White, Black, Male, Male,40,50
+0,21,0,0,1,42.0,119,39,49, State-gov, Self-emp-not-inc, Bachelors, Assoc-acdm, Never-married, Married-AF-spouse, Adm-clerical, Adm-clerical, White, Amer-Indian-Eskimo, Male, Male,40,68
+0,22,0,0,1,7.0,5,39,39, State-gov, State-gov, Bachelors, Bachelors, Never-married, Married-AF-spouse, Adm-clerical, Adm-clerical, White, Black, Male, Male,40,45
+0,23,0,0,1,33.0,7,39,52, State-gov, State-gov, Bachelors, Bachelors, Never-married, Married-spouse-absent, Adm-clerical, Adm-clerical, White, Amer-Indian-Eskimo, Male, Male,40,58
+0,24,0,0,1,22.0,7,39,40, State-gov, State-gov, Bachelors, Bachelors, Never-married, Married-civ-spouse, Adm-clerical, Armed-Forces, White, White, Male, Male,40,59
