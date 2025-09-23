@@ -140,7 +140,7 @@ def get_diversity(counterfactual_df: pd.DataFrame, feature_columns: List[str],
         if distances:
             diversities.append(min(distances))
     
-    return round(min(diversities), 2) if diversities else 0.0
+    return round(np.mean(diversities), 2) if diversities else -1.0
 
 def get_metrics(original_csv_path: str, counterfactual_csv_path: str, constraints: Dict[str, str]) -> Tuple[float, float, float, float, float, float]:
     """

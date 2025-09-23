@@ -33,7 +33,7 @@ class Config:
     SAVE_DIR: str = 'ppo_models'
     DATA_DIR: str = 'data'
     LOGS_DIR: str = 'ppo_logs'
-    CHECKPOINT_PREFIX: str = 'ppo_certifai'
+    CHECKPOINT_PREFIX: str = 'ppo'
     LEARNING_RATE_NEW: float = 1e-4
     LEARNING_RATE_CONTINUED: float = 1e-4
     N_STEPS: int = 2048
@@ -48,7 +48,7 @@ class Config:
     EVAL_FREQ: int = 5000
     N_EVAL_EPISODES: int = 10
     CHECKPOINT_SAVE_FREQ: int = 50000
-    MAX_STEPS_PER_SAMPLE: int = 250
+    MAX_STEPS_PER_SAMPLE: int = 150
     MAX_TRIES: int = 50
     MCTS_SIMULATIONS: int = 10
     # Use a random selection of 100 indices from the dataset for evaluation
@@ -541,7 +541,7 @@ def generate_single_counterfactual(env: PPOEnv, ppo_model: PPO, mcts: Optional[P
     total_steps = 0
     
     for tries in range(max_tries):
-        if success and tries > 20:
+        if success:# and tries > 20:
             #logger.info(f"Found a successful counterfactual after {tries} tries, stopping further attempts.")
             break
         obs = env.reset()
@@ -986,32 +986,19 @@ def main():
     constraints = Config.CONSTRAINTS
     indices_to_use = Config.INDICES_TO_USE
     
-    # logger.info("Processing PPO model...")
-    # ppo_model, env = train_ppo_for_counterfactuals(
-    #     dataset_path=dataset_path,
-    #     logs_dir=Config.LOGS_DIR,
-    #     save_dir=Config.SAVE_DIR,
-    #     total_timesteps=Config.TOTAL_TIMESTEPS,
-    #     mode=Config.TRAINING_MODE,
-    #     constraints=constraints,
-    #     verbose=1
-    # )
+    logger.info("Processing PPO model...")
+    ppo_model, env = train_ppo_for_counterfactuals(
+        dataset_path=dataset_path,
+        logs_dir=Config.LOGS_DIR,
+        save_dir=Config.SAVE_DIR,
+        total_timesteps=Config.TOTAL_TIMESTEPS,
+        mode=Config.TRAINING_MODE,
+        constraints=constraints,
+        verbose=1
+    )
     
-    # if ppo_model is not None:
-        # logger.info("Generating counterfactuals using standard PPO...")
-        # generate_counterfactuals(
-        #     ppo_model=ppo_model,
-        #     env=env,
-        #     dataset_path=dataset_path,
-        #     save_path=os.path.join(Config.DATA_DIR, 
-        #                           f"generated_counterfactuals_mcts_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
-        #     max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE-100,  # Reduced for MCTS
-        #     use_mcts=True,
-        #     mcts_simulations=Config.MCTS_SIMULATIONS,
-        #     specific_indices=indices_to_use,
-        #     verbose=1
-        # )
-
+    if ppo_model is not None:
+        logger.info("Generating counterfactuals using standard PPO...")
         # generate_counterfactuals(
         #     ppo_model=ppo_model,
         #     env=env,
@@ -1025,44 +1012,44 @@ def main():
         #     verbose=1
         # )
 
-        # logger.info("Generating multiple counterfactuals for a specific sample...")
-        # sample_index = 0  # Change this to the desired sample index
-        # _, _, counterfactual_df = generate_multiple_counterfactuals_for_sample(
-        #     ppo_model=ppo_model,
-        #     env=env,
-        #     dataset_path=dataset_path,
-        #     sample_index=sample_index,
-        #     num_counterfactuals=25,
-        #     save_path=os.path.join(Config.DATA_DIR, 
-        #                           f"generated_counterfactuals_sample_{sample_index}.csv"),
-        #     max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
-        #     use_mcts=False,
-        #     verbose=1
-        # )
+        logger.info("Generating multiple counterfactuals for a specific sample...")
+        sample_index = 0  # Change this to the desired sample index
+        _, _, counterfactual_df = generate_multiple_counterfactuals_for_sample(
+            ppo_model=ppo_model,
+            env=env,
+            dataset_path=dataset_path,
+            sample_index=sample_index,
+            num_counterfactuals=10,
+            save_path=os.path.join(Config.DATA_DIR, 
+                                  f"generated_counterfactuals_sample_{sample_index}.csv"),
+            max_steps_per_sample=Config.MAX_STEPS_PER_SAMPLE,
+            use_mcts=False,
+            verbose=1
+        )
 
-    logger.info("Processing GRPO model...")
-    grpo_trainer, grpo_env = train_grpo_for_counterfactuals(
-        dataset_path=dataset_path,
-        logs_dir=Config.LOGS_DIR,
-        save_dir=Config.SAVE_DIR,
-        total_iterations=Config.GRPO_TOTAL_ITERATIONS,
-        steps_per_iteration=Config.GRPO_STEPS_PER_ITERATION,
-        mu_iterations=Config.GRPO_MU_ITERATIONS,
-        mode=Config.TRAINING_MODE,
-        constraints=constraints,
-        verbose=1
-    )
+    # logger.info("Processing GRPO model...")
+    # grpo_trainer, grpo_env = train_grpo_for_counterfactuals(
+    #     dataset_path=dataset_path,
+    #     logs_dir=Config.LOGS_DIR,
+    #     save_dir=Config.SAVE_DIR,
+    #     total_iterations=Config.GRPO_TOTAL_ITERATIONS,
+    #     steps_per_iteration=Config.GRPO_STEPS_PER_ITERATION,
+    #     mu_iterations=Config.GRPO_MU_ITERATIONS,
+    #     mode=Config.TRAINING_MODE,
+    #     constraints=constraints,
+    #     verbose=1
+    # )
     
-    logger.info("Generating counterfactuals using GRPO...")
-    generate_counterfactuals_grpo(
-        trainer=grpo_trainer,
-        env=grpo_env,
-        dataset_path=dataset_path,
-        save_path=os.path.join(Config.DATA_DIR, 
-                                f"generated_counterfactuals_grpo_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
-        specific_indices=indices_to_use,
-        verbose=1
-    )
+    # logger.info("Generating counterfactuals using GRPO...")
+    # generate_counterfactuals_grpo(
+    #     trainer=grpo_trainer,
+    #     env=grpo_env,
+    #     dataset_path=dataset_path,
+    #     save_path=os.path.join(Config.DATA_DIR, 
+    #                             f"generated_counterfactuals_grpo_{os.path.splitext(os.path.basename(dataset_path))[0]}.csv"),
+    #     specific_indices=indices_to_use,
+    #     verbose=1
+    # )
 
 if __name__ == "__main__":
     main()

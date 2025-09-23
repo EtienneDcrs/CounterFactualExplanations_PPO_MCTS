@@ -64,9 +64,9 @@ class DatasetHandler:
 
 class PPOEnv(gym.Env):
     # Configuration Constants
-    RANDOMISATION_THRESHOLD: int = 40
+    RANDOMISATION_THRESHOLD: int = 75
     INITIAL_TEMPERATURE: float = 0.05
-    MAX_TEMPERATURE: float = 10.0
+    MAX_TEMPERATURE: float = 5.0
 
     def __init__(self, dataset_path: Optional[str] = None, numpy_dataset: Optional[np.ndarray] = None,
                  model=None, distance_metric: Optional[Callable] = None, label_encoders: Optional[Dict] = None,

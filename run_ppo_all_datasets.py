@@ -4,6 +4,7 @@ import warnings
 import logging
 import pandas as pd
 from typing import Optional, Dict, List, Tuple
+import time
 from PPO_train import Config, train_ppo_for_counterfactuals, generate_counterfactuals
 from utils import get_metrics
 
@@ -16,20 +17,21 @@ def run_ppo_and_metrics():
     """
     Run PPO counterfactual generation on multiple datasets and calculate metrics.
     Saves counterfactuals and original samples, then computes KPIs using utils.get_metrics.
+    Measures and reports time taken for counterfactual generation.
     Reports all results at the end.
     
     Returns:
-        List of dictionaries containing metrics for each dataset.
+        List of dictionaries containing metrics and generation time for each dataset.
     """
     # Define dataset and model pairs
     datasets = [
-        {
-            'dataset_name': 'breast_cancer',
-            'dataset_path': 'data/breast_cancer.csv',
-            'model_path': 'classification_models/breast_cancer_model.pt',
-            'constraints': {},
-            'indices_to_use': Config.INDICES_TO_USE
-        },
+        # {
+        #     'dataset_name': 'breast_cancer',
+        #     'dataset_path': 'data/breast_cancer.csv',
+        #     'model_path': 'classification_models/breast_cancer_model.pt',
+        #     'constraints': {},
+        #     'indices_to_use': Config.INDICES_TO_USE
+        # },
         {
             'dataset_name': 'diabetes',
             'dataset_path': 'data/diabetes.csv',
@@ -43,7 +45,14 @@ def run_ppo_and_metrics():
             'model_path': 'classification_models/adult_model.pt',
             'constraints': {},
             'indices_to_use': Config.INDICES_TO_USE
-        }
+        },
+        # {
+        #     'dataset_name': 'bank',
+        #     'dataset_path': 'data/bank.csv',
+        #     'model_path': 'classification_models/bank_model.pt',
+        #     'constraints': {},
+        #     'indices_to_use': Config.INDICES_TO_USE
+        # }
     ]
     
     results = []
@@ -92,8 +101,9 @@ def run_ppo_and_metrics():
             })
             continue
         
-        # Generate counterfactuals
+        # Generate counterfactuals and measure time
         try:
+            start_time = time.time()
             counterfactuals, original_df, counterfactual_df = generate_counterfactuals(
                 ppo_model=ppo_model,
                 env=env,
@@ -105,7 +115,8 @@ def run_ppo_and_metrics():
                 mcts_simulations=Config.MCTS_SIMULATIONS,
                 verbose=1
             )
-            logger.info(f"Counterfactuals generated and saved to {save_path}")
+            generation_time = time.time() - start_time
+            logger.info(f"Counterfactuals generated and saved to {save_path} in {generation_time:.2f} seconds")
         except Exception as e:
             logger.error(f"Failed to generate counterfactuals for {dataset_name}: {e}")
             results.append({
@@ -129,7 +140,8 @@ def run_ppo_and_metrics():
                 'implausibility': implausibility,
                 'sparsity': sparsity,
                 'actionability': actionability,
-                'diversity': diversity
+                'diversity': diversity,
+                'generation_time_seconds': generation_time
             })
             logger.info(f"Metrics calculated for {dataset_name}")
         except Exception as e:
@@ -152,6 +164,7 @@ def run_ppo_and_metrics():
             logger.info(f"Mean sparsity: {result['sparsity']:.2f}")
             logger.info(f"Mean actionability: {result['actionability']:.2f}")
             logger.info(f"Diversity: {result['diversity']:.2f}")
+            logger.info(f"Generation time: {result['generation_time_seconds']:.2f} seconds")
 
     return results
 
